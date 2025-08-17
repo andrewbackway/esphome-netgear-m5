@@ -2,7 +2,8 @@
 
 #include <cstring>
 #include <string>
-#include <ArduinoJson.h>  
+#include <ArduinoJson.h>  // ArduinoJson v7 only
+#include <cstdlib>        // atoi
 
 namespace esphome {
 namespace netgear_m5 {
@@ -11,13 +12,8 @@ static const char *const TAG = "netgear_m5";
 
 void NetgearM5Component::setup() {
   xTaskCreatePinnedToCore(
-      &NetgearM5Component::task_trampoline_, 
-      "netgear_m5_task",
-      8192, 
-      this, 
-      4, 
-      &this->task_handle_, 
-      1);
+      &NetgearM5Component::task_trampoline_, "netgear_m5_task",
+      8192, this, 4, &this->task_handle_, 1);
 }
 
 void NetgearM5Component::loop() {
@@ -30,6 +26,7 @@ void NetgearM5Component::dump_config() {
   ESP_LOGCONFIG(TAG, "Netgear M5 Component:");
   ESP_LOGCONFIG(TAG, "  Host: %s", this->host_.c_str());
   ESP_LOGCONFIG(TAG, "  Poll interval: %u ms", (unsigned) this->poll_interval_ms_);
+  ESP_LOGCONFIG(TAG, "  ArduinoJson: v7 only");
 }
 
 void NetgearM5Component::task_trampoline_(void *param) {
@@ -83,12 +80,9 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
   freeaddrinfo(res);
   if (sock < 0) return false;
 
-  std::string req = "GET " + std::string(path) + " HTTP/1.1\r\n" + 
-                    "Host: " + this->host_ + "\r\n" + 
-                    "User-Agent: ESPHome-NetgearM5/1.0\r\n" +
-                    "Connection: close\r\n" + 
-                    "Accept: application/json\r\n" + 
-                    "\r\n";
+  std::string req = "GET " + std::string(path) +
+                    " HTTP/1.1\r\nHost: " + this->host_ +
+                    "\r\nUser-Agent: ESPHome-NetgearM5/1.0\r\nConnection: close\r\nAccept: application/json\r\n\r\n";
   lwip_send(sock, req.data(), req.size(), 0);
 
   char buf[1024];
@@ -119,8 +113,12 @@ void NetgearM5Component::publish_pending_() {
   taskEXIT_CRITICAL(&this->mux_);
   if (payload.empty()) return;
 
-  ArduinoJson::JsonDocument doc;
-  if (deserializeJson(doc, payload)) return;
+  ArduinoJson::DynamicJsonDocument doc(131072);
+  auto err = deserializeJson(doc, payload);
+  if (err) {
+    ESP_LOGW(TAG, "JSON parse failed in publish_pending_: %s", err.c_str());
+    return;
+  }
   auto root = doc.as<ArduinoJson::JsonVariantConst>();
 
   // Push numeric bindings
@@ -137,7 +135,8 @@ void NetgearM5Component::publish_pending_() {
   }
 }
 
-// Supports dotted paths + array indexes (e.g., "wwan.bandRegion[0].name")
+// Supports dotted paths + array indexes (e.g., "wwan.bandRegion[0].name").
+// NOTE: replaced Deprecated containsKey(...) usage with safe property access.
 std::string NetgearM5Component::dotted_lookup_(const std::string &path, const ::ArduinoJson::JsonVariantConst &root) {
   ::ArduinoJson::JsonVariantConst cur = root;
   size_t i = 0;
@@ -152,29 +151,40 @@ std::string NetgearM5Component::dotted_lookup_(const std::string &path, const ::
       std::string key = token.substr(0, lb);
       int index = atoi(token.substr(lb + 1, token.size() - lb - 2).c_str());
 
+      // If there's a key (object property) before the array
       if (!key.empty()) {
-        if (!cur.containsKey(key)) return {};
-        cur = cur[key];
+        auto next = cur[key.c_str()];           // safe access
+        if (next.isNull()) return {};
+        cur = next;
       }
 
-      if (!cur.is<JsonArrayConst>()) return {};
-      auto arr = cur.as<JsonArrayConst>();
-      if (index < 0 || index >= arr.size()) return {};
+      // cur must now be an array
+      if (!cur.is<ArduinoJson::JsonArrayConst>()) return {};
+      auto arr = cur.as<ArduinoJson::JsonArrayConst>();
+      if (index < 0 || static_cast<size_t>(index) >= arr.size()) return {};
       cur = arr[index];
     } else {
-      if (!cur.containsKey(token)) return {};
-      cur = cur[token];
+      // Simple object property access
+      auto next = cur[token.c_str()];
+      if (next.isNull()) return {};
+      cur = next;
     }
 
     if (dot == std::string::npos) break;
     i = dot + 1;
   }
 
+  // Return as string depending on type
   if (cur.is<const char*>()) return cur.as<const char*>();
   if (cur.is<int>()) return std::to_string(cur.as<int>());
-  if (cur.is<double>()) return std::to_string(cur.as<double>());
+  if (cur.is<long>()) return std::to_string(cur.as<long>());
+  if (cur.is<double>()) {
+    // trim trailing zeros is optional; keep simple
+    return std::to_string(cur.as<double>());
+  }
   if (cur.is<bool>()) return cur.as<bool>() ? "true" : "false";
 
+  // Fallback: serialize complex objects/arrays to string
   std::string out;
   serializeJson(cur, out);
   return out;
