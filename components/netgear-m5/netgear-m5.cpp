@@ -151,18 +151,22 @@ namespace esphome
             }
             lwip_close(sock);
 
-            // Log the full response in chunks to avoid buffer overflow
+            // Log the full response as a single string, escaping newlines
             ESP_LOGD(TAG, "Full HTTP response (%u bytes):", rx.size());
-            const size_t chunk_size = 512; // Log in 512-byte chunks
-            for (size_t i = 0; i < rx.size(); i += chunk_size)
+            std::string log_safe_rx = rx;
+            for (char &c : log_safe_rx)
             {
-                std::string chunk = rx.substr(i, chunk_size);
-                // Replace non-printable characters with a placeholder
-                for (char &c : chunk)
-                {
-                    if (c < 32 || c >= 127)
-                        c = '?'; // Replace non-printable chars
-                }
+                if (c == '\r')
+                    c = '\\'; // Escape carriage return
+                else if (c == '\n')
+                    c = 'n'; // Escape newline
+                else if (c < 32 || c >= 127)
+                    c = '?'; // Replace other non-printable chars
+            }
+            const size_t chunk_size = 128; // Smaller chunks for better log readability
+            for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
+            {
+                std::string chunk = log_safe_rx.substr(i, chunk_size);
                 ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
             }
 
@@ -182,11 +186,11 @@ namespace esphome
             auto cl_pos = headers.find("Content-Length:");
             if (cl_pos != std::string::npos)
             {
-                //try
+                // try
                 //{
-                    content_length = std::stoul(headers.substr(cl_pos + 15));
+                content_length = std::stoul(headers.substr(cl_pos + 15));
                 //}
-                //catch (...)
+                // catch (...)
                 //{
                 //    content_length = 0;
                 //}
@@ -208,17 +212,21 @@ namespace esphome
                 body = body_part;
             }
 
-            // Log the body in chunks
+            // Log the body, escaping newlines
             ESP_LOGD(TAG, "Extracted HTTP body (%u bytes):", body.size());
-            for (size_t i = 0; i < body.size(); i += chunk_size)
+            std::string log_safe_body = body;
+            for (char &c : log_safe_body)
             {
-                std::string chunk = body.substr(i, chunk_size);
-                // Replace non-printable characters
-                for (char &c : chunk)
-                {
-                    if (c < 32 || c >= 127)
-                        c = '?'; // Replace non-printable chars
-                }
+                if (c == '\r')
+                    c = '\\'; // Escape carriage return
+                else if (c == '\n')
+                    c = 'n'; // Escape newline
+                else if (c < 32 || c >= 127)
+                    c = '?'; // Replace other non-printable chars
+            }
+            for (size_t i = 0; i < log_safe_body.size(); i += chunk_size)
+            {
+                std::string chunk = log_safe_body.substr(i, chunk_size);
                 ESP_LOGD(TAG, "Body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
             }
 
