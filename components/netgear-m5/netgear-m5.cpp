@@ -4,6 +4,9 @@
 #include <string>
 #include <ArduinoJson.h>  
 
+#include "esphome/components/http_request/http_request.h"
+
+
 namespace esphome {
 namespace netgear_m5 {
 
@@ -11,6 +14,9 @@ static const char *const TAG = "netgear_m5";
 
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
+
+  this->http_client_ = new http_request::HttpRequestComponent();
+  this->http_client_->set_parent(this);
 
   xTaskCreatePinnedToCore(
       &NetgearM5Component::task_trampoline_,
@@ -61,112 +67,33 @@ void NetgearM5Component::task_loop_() {
 }
 
 bool NetgearM5Component::fetch_once_(std::string &body) {
-  ESP_LOGD(TAG, "Fetching data from Netgear M5");
-
-  if (this->host_.empty()) {
-    ESP_LOGW(TAG, "Host is empty, cannot fetch data");
+  if (!this->http_client_) {
+    ESP_LOGE(TAG, "HTTP client not initialized");
     return false;
   }
 
-  const char *port = "80";
-  const char *path = "/api/model.json?internalapi=1";
+  std::string url = "http://" + this->host_ + "/api/model.json?internalapi=1";
+  bool success = false;
 
-  struct addrinfo hints = {};
-  hints.ai_family = AF_INET;
-  hints.ai_socktype = SOCK_STREAM;
+  http_request::HttpRequestResponse resp;
+  this->http_client_->send(
+      http_request::RequestOptions{
+          .method = http_request::Method::GET,
+          .url = url,
+          .timeout = 5000  // ms
+      },
+      [&](http_request::HttpRequestResponse r) {
+        if (r.status_code == 200 && r.body.has_value()) {
+          body = *r.body;
+          success = true;
+        } else {
+          ESP_LOGW(TAG, "HTTP request failed, code %d", r.status_code);
+        }
+      });
 
-  struct addrinfo *res = nullptr;
-  ESP_LOGD(TAG, "Resolving host: %s", this->host_.c_str());
-  int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
-  if (err != 0 || res == nullptr) {
-    // Fallback for gai_strerror if not available
-    #ifdef gai_strerror
-    ESP_LOGW(TAG, "DNS resolution failed for %s: %s", this->host_.c_str(), gai_strerror(err));
-    #else
-    ESP_LOGW(TAG, "DNS resolution failed for %s: error code %d", this->host_.c_str(), err);
-    #endif
-    if (res) freeaddrinfo(res);
-    return false;
-  }
-
-  ESP_LOGD(TAG, "Resolved %s to %d addresses", this->host_.c_str(), 1 + (res->ai_next != nullptr));
-
-  int sock = -1;
-  for (struct addrinfo *p = res; p != nullptr; p = p->ai_next) {
-    sock = lwip_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (sock < 0) {
-      ESP_LOGW(TAG, "Failed to create socket: %d", errno);
-      continue;
-    }
-
-    struct timeval tv{.tv_sec = 5, .tv_usec = 0};
-    if (lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-      ESP_LOGW(TAG, "Failed to set receive timeout: %d", errno);
-      lwip_close(sock);
-      sock = -1;
-      continue;
-    }
-    if (lwip_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
-      ESP_LOGW(TAG, "Failed to set send timeout: %d", errno);
-      lwip_close(sock);
-      sock = -1;
-      continue;
-    }
-
-    ESP_LOGD(TAG, "Connecting to %s:%s", this->host_.c_str(), port);
-    if (lwip_connect(sock, p->ai_addr, p->ai_addrlen) == 0) {
-      break;
-    }
-    ESP_LOGW(TAG, "Connection failed: %d", errno);
-    lwip_close(sock);
-    sock = -1;
-  }
-  freeaddrinfo(res);
-  if (sock < 0) {
-    ESP_LOGW(TAG, "Failed to connect to %s:%s", this->host_.c_str(), port);
-    return false;
-  }
-
-  ESP_LOGD(TAG, "Creating HTTP request");
-
-  std::string req = "GET " + std::string(path) + " HTTP/1.1\r\n" +
-                    "Host: " + this->host_ + "\r\n" +
-                    "User-Agent: ESPHome-NetgearM5/1.0\r\n" +
-                    "Connection: close\r\n" +
-                    "Accept: application/json\r\n" +
-                    "\r\n";
-  ESP_LOGD(TAG, "Sending HTTP request to %s", this->host_.c_str());
-  int sent = lwip_send(sock, req.data(), req.size(), 0);
-  if (sent < 0) {
-    ESP_LOGW(TAG, "Failed to send request: %d", errno);
-    lwip_close(sock);
-    return false;
-  }
-
-  char buf[1024];
-  std::string rx;
-  rx.reserve(4096); // Reserve space for typical response size
-  for (;;) {
-    int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
-    if (n < 0) {
-      ESP_LOGW(TAG, "Receive failed: %d", errno);
-      break;
-    }
-    if (n == 0) {
-      break; // Connection closed
-    }
-    buf[n] = '\0'; // Null-terminate for safety
-    rx.append(buf, n);
-  }
-  ESP_LOGD(TAG, "Received %u bytes from %s", rx.size(), this->host_.c_str());
-  lwip_close(sock);
-
-  body.swap(rx);
-
-  ESP_LOGD(TAG, "Extracted HTTP body: %s", body.c_str());
-  
-  return true;
+  return success;
 }
+
 
 bool NetgearM5Component::extract_http_body_(const std::string &raw, std::string &body_out) {
   auto pos = raw.find("\r\n\r\n");
