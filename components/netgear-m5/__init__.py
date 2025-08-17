@@ -1,6 +1,9 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, CONF_NAME, UNIT_EMPTY, ICON_EMPTY
+from esphome.const import CONF_ID, CONF_NAME, ICON_EMPTY, UNIT_EMPTY
+
+import esphome.components.sensor as sensor
+import esphome.components.text_sensor as text_sensor
 
 AUTO_LOAD = ["sensor", "text_sensor"]
 CODEOWNERS = ["@you"]
@@ -16,20 +19,15 @@ CONF_PATH = "path"
 CONF_UNIT = "unit"
 CONF_ICON = "icon"
 
-SENSOR_SCHEMA = cv.Schema(
+SENSOR_SCHEMA = sensor.SENSOR_SCHEMA.extend(
     {
-        cv.Required(CONF_NAME): cv.string,
         cv.Required(CONF_PATH): cv.string,
-        cv.Optional(CONF_UNIT, default=UNIT_EMPTY): cv.string,
-        cv.Optional(CONF_ICON, default=ICON_EMPTY): cv.icon,
     }
 )
 
-TEXT_SENSOR_SCHEMA = cv.Schema(
+TEXT_SENSOR_SCHEMA = text_sensor.TEXT_SENSOR_SCHEMA.extend(
     {
-        cv.Required(CONF_NAME): cv.string,
         cv.Required(CONF_PATH): cv.string,
-        cv.Optional(CONF_ICON, default=ICON_EMPTY): cv.icon,
     }
 )
 
@@ -43,6 +41,7 @@ CONFIG_SCHEMA = cv.Schema(
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
+
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
@@ -51,10 +50,10 @@ async def to_code(config):
 
     # Numeric sensors
     for s in config[CONF_SENSORS]:
-        sens = await cg.new_sensor(s[CONF_NAME], s[CONF_UNIT], s[CONF_ICON])
+        sens = await sensor.new_sensor(s)
         cg.add(var.bind_numeric_sensor(s[CONF_PATH], sens))
 
     # Text sensors
     for ts in config[CONF_TEXT_SENSORS]:
-        sens = await cg.new_text_sensor(ts[CONF_NAME], ts[CONF_ICON])
+        sens = await text_sensor.new_text_sensor(ts)
         cg.add(var.bind_text_sensor(ts[CONF_PATH], sens))
