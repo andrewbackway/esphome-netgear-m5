@@ -5,7 +5,8 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
-#include "esphome/components/http_request/http_request.h"
+
+#include "esphome/components/http_request/http_request_component.h"
 
 #include <string>
 #include <vector>
