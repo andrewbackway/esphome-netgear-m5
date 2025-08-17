@@ -162,6 +162,9 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
   lwip_close(sock);
 
   body.swap(rx);
+
+  ESP_LOGD(TAG, "Extracted HTTP body: %s", body.c_str());
+  
   return true;
 }
 
