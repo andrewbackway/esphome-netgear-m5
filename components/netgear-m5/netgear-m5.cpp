@@ -11,19 +11,26 @@ static const char *const TAG = "netgear_m5";
 
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
-  // Wait for Wi-Fi connection
-  for (int i = 0; i < 30 && !network::is_connected(); i++) {
-    ESP_LOGD(TAG, "Waiting for Wi-Fi connection (%d/30)...", i + 1);
+  // Wait for network connectivity
+  for (int i = 0; i < 30; i++) {
+    struct addrinfo hints = {};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    struct addrinfo *res = nullptr;
+    // Test connectivity with Google's DNS
+    int err = getaddrinfo("8.8.8.8", "53", &hints, &res);
+    if (err == 0 && res != nullptr) {
+      freeaddrinfo(res);
+      ESP_LOGD(TAG, "Network is connected");
+      break;
+    }
+    ESP_LOGD(TAG, "Waiting for network connection (%d/30)...", i + 1);
     delay(1000);
-  }
-  if (!network::is_connected()) {
-    ESP_LOGE(TAG, "Wi-Fi not connected, cannot start Netgear M5 task");
-    return;
   }
   xTaskCreatePinnedToCore(
       &NetgearM5Component::task_trampoline_,
       "netgear_m5_task",
-      12288, // Increased stack size from previous recommendation
+      12288, // Increased stack size
       this,
       4,
       &this->task_handle_,
