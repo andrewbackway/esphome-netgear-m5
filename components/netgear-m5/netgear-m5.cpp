@@ -12,24 +12,6 @@ static const char *const TAG = "netgear_m5";
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
 
-  return;
-  
-  // Wait for network connectivity
-  for (int i = 0; i < 30; i++) {
-    struct addrinfo hints = {};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    struct addrinfo *res = nullptr;
-    // Test connectivity with Google's DNS
-    int err = getaddrinfo("8.8.8.8", "53", &hints, &res);
-    if (err == 0 && res != nullptr) {
-      freeaddrinfo(res);
-      ESP_LOGD(TAG, "Network is connected");
-      break;
-    }
-    ESP_LOGD(TAG, "Waiting for network connection (%d/30)...", i + 1);
-    delay(1000);
-  }
   xTaskCreatePinnedToCore(
       &NetgearM5Component::task_trampoline_,
       "netgear_m5_task",
