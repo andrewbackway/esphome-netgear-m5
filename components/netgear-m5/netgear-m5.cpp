@@ -156,6 +156,7 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
       break; // Connection closed
     }
     buf[n] = '\0'; // Null-terminate for safety
+    ESP_LOGD(TAG, "Received %d bytes: %s", n, buf);
     rx.append(buf, n);
   }
   ESP_LOGD(TAG, "Received %u bytes from %s", rx.size(), this->host_.c_str());
