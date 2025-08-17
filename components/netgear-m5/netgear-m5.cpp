@@ -70,7 +70,12 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
   ESP_LOGD(TAG, "Resolving host: %s", this->host_.c_str());
   int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
   if (err != 0 || res == nullptr) {
+    // Fallback for gai_strerror if not available
+    #ifdef gai_strerror
     ESP_LOGW(TAG, "DNS resolution failed for %s: %s", this->host_.c_str(), gai_strerror(err));
+    #else
+    ESP_LOGW(TAG, "DNS resolution failed for %s: error code %d", this->host_.c_str(), err);
+    #endif
     if (res) freeaddrinfo(res);
     return false;
   }
