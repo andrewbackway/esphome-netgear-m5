@@ -257,13 +257,13 @@ namespace esphome
                 auto cl_pos = headers.find("Content-Length:");
                 if (cl_pos != std::string::npos)
                 {
-                    //try
+                    // try
                     //{
-                        content_length = std::stoul(headers.substr(cl_pos + 15));
+                    content_length = std::stoul(headers.substr(cl_pos + 15));
                     //}
-                    //catch (...)
+                    // catch (...)
                     //{
-                        content_length = 0;
+                    content_length = 0;
                     //}
                 }
 
@@ -318,7 +318,7 @@ namespace esphome
             return true;
         }
 
-      void NetgearM5Component::publish_pending_()
+        void NetgearM5Component::publish_pending_()
         {
             std::string payload;
             taskENTER_CRITICAL(&this->mux_);
@@ -335,7 +335,7 @@ namespace esphome
             ESP_LOGD(TAG, "Raw JSON payload (%u bytes): %s", payload.size(), payload.c_str());
 
             ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
-            StaticJsonDocument<8192> doc; // Increased from 4096
+            StaticJsonDocument<8192> doc;
             DeserializationError err = deserializeJson(doc, payload);
             if (err)
             {
@@ -343,7 +343,14 @@ namespace esphome
                 return;
             }
             ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
-            auto root = doc.as<ArduinoJson::JsonVariantConst>();
+
+            // Log the entire parsed JSON
+            std::string parsed_json;
+            serializeJson(doc, parsed_json);
+            ESP_LOGD(TAG, "Parsed JSON: %s", parsed_json.c_str());
+
+            // Use the entire document as root
+            auto root = doc.as<ArduinoJson::JsonObjectConst>();
 
             // Numeric sensors
             for (auto &b : this->num_bindings_)
@@ -355,7 +362,7 @@ namespace esphome
                 if (!v.empty())
                 {
                     char *endptr;
-                    errno = 0; // Reset errno
+                    errno = 0;
                     double value = strtod(v.c_str(), &endptr);
                     if (endptr == v.c_str() || *endptr != '\0' || errno == ERANGE)
                     {
@@ -502,7 +509,7 @@ namespace esphome
             ESP_LOGD(TAG, "Found complex value: %s", out.c_str());
             return out;
         }
-        
+
         void NetgearM5Component::bind_numeric_sensor(const std::string &json_path, sensor::Sensor *s)
         {
             this->num_bindings_.push_back({json_path, s});
