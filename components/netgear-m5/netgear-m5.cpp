@@ -42,38 +42,25 @@ void NetgearM5Component::task_trampoline_(void *param) {
 }
 
 void NetgearM5Component::task_loop_() {
-  const TickType_t delay_ticks = pdMS_TO_TICKS(this->poll_interval_ms_);
-  for (;;) {
-    if (!network::is_connected()) {
-      ESP_LOGW(TAG, "Network not connected, skipping fetch");
-      vTaskDelay(pdMS_TO_TICKS(5000));
-      continue;
+  std::string url = this->ap_url_ + "/api/model.json";
+
+  std::shared_ptr<http_request::HttpContainer> container = this->http_client_->get(url, {});
+
+  if (container && container->status_code == 200) {
+    // Note: HttpContainer does not have get_response_as_string().
+    // You must read the content yourself, or use an on_response automation.
+    // This is the correct, albeit more complex, way to get the body synchronously.
+    std::string body;
+    const size_t buffer_size = 1024;
+    uint8_t buffer[buffer_size];
+    int len;
+    while ((len = container->read(buffer, buffer_size)) > 0) {
+      body.append((char *) buffer, len);
     }
-
-    std::string url = "http://" + this->host_ + "/api/model.json?internalapi=1";
-
-    // Use the perform method to get an HttpContainer.
-    std::shared_ptr<http_request::HttpContainer> container = this->http_client_->perform(url, "GET", "", {}, {});
-
-    // Check if the request was successful and we have a valid container.
-    if (container && container->get_status_code() == 200) {
-      std::string body = container->get_response_as_string();
-      if (!body.empty()) {
-        ESP_LOGD(TAG, "Received response body: %s", body.c_str());
-
-        // Process the response body.
-        taskENTER_CRITICAL(&this->mux_);
-        this->last_payload_ = body;
-        this->has_new_payload_ = true;
-        taskEXIT_CRITICAL(&this->mux_);
-      } else {
-        ESP_LOGW(TAG, "Received empty response body");
-      }
-    } else {
-      ESP_LOGW(TAG, "HTTP request failed, status code: %d", container ? container->get_status_code() : -1);
-    }
-    
-    vTaskDelay(delay_ticks);
+    ESP_LOGD(TAG, "HTTP request successful, body: %s", body.c_str());
+    this->parse_response(body);
+  } else {
+    ESP_LOGW(TAG, "HTTP request failed, status code: %d", container ? container->status_code : -1);
   }
 }
 
