@@ -72,7 +72,7 @@ namespace esphome
             }
         }
 
-        bool NetgearM5Component::fetch_once_(std::string &body)
+        bool fetch_once_(std::string &body)
         {
             ESP_LOGD(TAG, "Fetching data from Netgear M5");
 
@@ -83,154 +83,228 @@ namespace esphome
             }
 
             const char *port = "80";
-            const char *path = "/api/model.json?internalapi=1";
+            std::string current_path = "/api/model.json?internalapi=1";
+            int max_redirects = 3;
+            int redirect_count = 0;
 
-            struct addrinfo hints = {};
-            hints.ai_family = AF_INET;
-            hints.ai_socktype = SOCK_STREAM;
-
-            struct addrinfo *res = nullptr;
-            int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
-            if (err != 0 || res == nullptr)
+            while (redirect_count < max_redirects)
             {
-                ESP_LOGW(TAG, "DNS resolution failed for %s", this->host_.c_str());
-                if (res)
-                    freeaddrinfo(res);
-                return false;
-            }
+                struct addrinfo hints = {};
+                hints.ai_family = AF_INET;
+                hints.ai_socktype = SOCK_STREAM;
 
-            int sock = -1;
-            for (struct addrinfo *p = res; p != nullptr; p = p->ai_next)
-            {
-                sock = lwip_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-                if (sock < 0)
-                    continue;
-
-                struct timeval tv{.tv_sec = 5, .tv_usec = 0};
-                lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-                lwip_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-                if (lwip_connect(sock, p->ai_addr, p->ai_addrlen) == 0)
-                    break;
-                lwip_close(sock);
-                sock = -1;
-            }
-            freeaddrinfo(res);
-            if (sock < 0)
-            {
-                ESP_LOGW(TAG, "Failed to connect to %s:%s", this->host_.c_str(), port);
-                return false;
-            }
-
-            // Build request
-            std::string req = "GET " + std::string(path) + " HTTP/1.1\r\n" +
-                              "Host: " + this->host_ + "\r\n" +
-                              "User-Agent: ESPHome-NetgearM5/1.0\r\n" +
-                              "Connection: close\r\n" +
-                              "Accept: application/json\r\n" +
-                              "\r\n";
-
-            if (lwip_send(sock, req.data(), req.size(), 0) < 0)
-            {
-                ESP_LOGW(TAG, "Failed to send request: %d", errno);
-                lwip_close(sock);
-                return false;
-            }
-            // Read response
-            char buf[1024];
-            std::string rx;
-            rx.reserve(8192);
-
-            while (true)
-            {
-                int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0); // Leave space for null terminator
-                if (n <= 0)
-                    break;
-                buf[n] = '\0'; // Null-terminate the buffer
-                rx.append(buf, n);
-            }
-            lwip_close(sock);
-
-            // Log the full response as a single string, escaping newlines
-            ESP_LOGD(TAG, "Full HTTP response (%u bytes):", rx.size());
-            std::string log_safe_rx = rx;
-            for (char &c : log_safe_rx)
-            {
-                if (c == '\r')
-                    c = '\\'; // Escape carriage return
-                else if (c == '\n')
-                    c = 'n'; // Escape newline
-                else if (c < 32 || c >= 127)
-                    c = '?'; // Replace other non-printable chars
-            }
-            const size_t chunk_size = 50; // Smaller chunks for better log readability
-            for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
-            {
-                std::string chunk = log_safe_rx.substr(i, chunk_size);
-                ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
-            }
-
-            // Find header/body split
-            auto header_end = rx.find("\r\n\r\n");
-            if (header_end == std::string::npos)
-            {
-                ESP_LOGW(TAG, "Malformed HTTP response, no header-body separator");
-                return false;
-            }
-
-            std::string headers = rx.substr(0, header_end);
-            std::string body_part = rx.substr(header_end + 4);
-
-            // Look for Content-Length
-            size_t content_length = 0;
-            auto cl_pos = headers.find("Content-Length:");
-            if (cl_pos != std::string::npos)
-            {
-                // try
-                //{
-                content_length = std::stoul(headers.substr(cl_pos + 15));
-                //}
-                // catch (...)
-                //{
-                //    content_length = 0;
-                //}
-            }
-
-            if (content_length > 0)
-            {
-                if (body_part.size() < content_length)
+                struct addrinfo *res = nullptr;
+                int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
+                if (err != 0 || res == nullptr)
                 {
-                    ESP_LOGW(TAG, "Body truncated: expected %u bytes, got %u bytes", (unsigned)content_length, (unsigned)body_part.size());
+                    ESP_LOGW(TAG, "DNS resolution failed for %s", this->host_.c_str());
+                    if (res)
+                        freeaddrinfo(res);
+                    return false;
+                }
+
+                int sock = -1;
+                for (struct addrinfo *p = res; p != nullptr; p = p->ai_next)
+                {
+                    sock = lwip_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+                    if (sock < 0)
+                        continue;
+
+                    struct timeval tv{.tv_sec = 10, .tv_usec = 0};
+                    lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+                    lwip_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+                    if (lwip_connect(sock, p->ai_addr, p->ai_addrlen) == 0)
+                        break;
+                    lwip_close(sock);
+                    sock = -1;
+                }
+                freeaddrinfo(res);
+                if (sock < 0)
+                {
+                    ESP_LOGW(TAG, "Failed to connect to %s:%s", this->host_.c_str(), port);
+                    return false;
+                }
+
+                // Build request
+                std::string req = "GET " + current_path + " HTTP/1.1\r\n" +
+                                  "Host: " + this->host_ + "\r\n" +
+                                  "User-Agent: ESPHome-NetgearM5/1.0\r\n" +
+                                  "Connection: close\r\n" +
+                                  "Accept: application/json\r\n";
+                if (!this->cookie_.empty())
+                {
+                    req += "Cookie: " + this->cookie_ + "\r\n";
+                }
+                req += "\r\n";
+
+                if (lwip_send(sock, req.data(), req.size(), 0) < 0)
+                {
+                    ESP_LOGW(TAG, "Failed to send request: %d", errno);
+                    lwip_close(sock);
+                    return false;
+                }
+
+                // Read response
+                char buf[1024];
+                std::string rx;
+                rx.reserve(8192);
+
+                while (true)
+                {
+                    int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+                    if (n <= 0)
+                        break;
+                    buf[n] = '\0';
+                    rx.append(buf, n);
+                }
+                lwip_close(sock);
+
+                // Log full response, escaping newlines
+                ESP_LOGD(TAG, "Full HTTP response (%u bytes):", rx.size());
+                std::string log_safe_rx = rx;
+                for (char &c : log_safe_rx)
+                {
+                    if (c == '\r')
+                        c = '\\';
+                    else if (c == '\n')
+                        c = 'n';
+                    else if (c < 32 || c >= 127)
+                        c = '?';
+                }
+                const size_t chunk_size = 256;
+                for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
+                {
+                    std::string chunk = log_safe_rx.substr(i, chunk_size);
+                    ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+                }
+
+                // Find header/body split
+                auto header_end = rx.find("\r\n\r\n");
+                if (header_end == std::string::npos)
+                {
+                    ESP_LOGW(TAG, "Malformed HTTP response, no header-body separator");
+                    return false;
+                }
+
+                std::string headers = rx.substr(0, header_end);
+                std::string body_part = rx.substr(header_end + 4);
+
+                // Check for Set-Cookie header
+                auto cookie_pos = headers.find("Set-Cookie:");
+                if (cookie_pos != std::string::npos)
+                {
+                    size_t start = cookie_pos + 11;
+                    size_t end = headers.find("\r\n", start);
+                    if (end == std::string::npos)
+                        end = headers.size();
+                    this->cookie_ = headers.substr(start, end - start);
+                    // Trim whitespace
+                    this->cookie_.erase(0, this->cookie_.find_first_not_of(" \t"));
+                    this->cookie_.erase(this->cookie_.find_last_not_of(" \t") + 1);
+                    ESP_LOGD(TAG, "Stored cookie: %s", this->cookie_.c_str());
+                }
+
+                // Check for redirect
+                if (headers.find("HTTP/1.1 302") != std::string::npos ||
+                    headers.find("HTTP/1.0 302") != std::string::npos)
+                {
+                    auto loc_pos = headers.find("Location:");
+                    if (loc_pos != std::string::npos)
+                    {
+                        size_t start = loc_pos + 9;
+                        size_t end = headers.find("\r\n", start);
+                        if (end == std::string::npos)
+                            end = headers.size();
+                        std::string location = headers.substr(start, end - start);
+                        // Trim whitespace
+                        location.erase(0, location.find_first_not_of(" \t"));
+                        location.erase(location.find_last_not_of(" \t") + 1);
+                        ESP_LOGD(TAG, "Redirect detected to: %s", location.c_str());
+
+                        // Update path for redirect
+                        if (location.find("http://") == 0)
+                        {
+                            size_t path_start = location.find("/", 7);
+                            if (path_start == std::string::npos)
+                            {
+                                current_path = "/";
+                            }
+                            else
+                            {
+                                current_path = location.substr(path_start);
+                            }
+                        }
+                        else
+                        {
+                            current_path = location;
+                        }
+
+                        redirect_count++;
+                        ESP_LOGD(TAG, "Following redirect to %s", current_path.c_str());
+                        continue;
+                    }
+                    else
+                    {
+                        ESP_LOGW(TAG, "Redirect response missing Location header");
+                        return false;
+                    }
+                }
+
+                // Look for Content-Length
+                size_t content_length = 0;
+                auto cl_pos = headers.find("Content-Length:");
+                if (cl_pos != std::string::npos)
+                {
+                    //try
+                    //{
+                        content_length = std::stoul(headers.substr(cl_pos + 15));
+                    //}
+                    //catch (...)
+                    //{
+                        content_length = 0;
+                    //}
+                }
+
+                if (content_length > 0)
+                {
+                    if (body_part.size() < content_length)
+                    {
+                        ESP_LOGW(TAG, "Body truncated: expected %u bytes, got %u bytes", (unsigned)content_length, (unsigned)body_part.size());
+                    }
+                    else
+                    {
+                        body = body_part.substr(0, content_length);
+                    }
                 }
                 else
                 {
-                    body = body_part.substr(0, content_length);
+                    body = body_part;
                 }
-            }
-            else
-            {
-                body = body_part;
+
+                // Log body, escaping newlines
+                ESP_LOGD(TAG, "Extracted HTTP body (%u bytes):", body.size());
+                std::string log_safe_body = body;
+                for (char &c : log_safe_body)
+                {
+                    if (c == '\r')
+                        c = '\\';
+                    else if (c == '\n')
+                        c = 'n';
+                    else if (c < 32 || c >= 127)
+                        c = '?';
+                }
+                for (size_t i = 0; i < log_safe_body.size(); i += chunk_size)
+                {
+                    std::string chunk = log_safe_body.substr(i, chunk_size);
+                    ESP_LOGD(TAG, "Body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+                }
+
+                return true;
             }
 
-            // Log the body, escaping newlines
-            ESP_LOGD(TAG, "Extracted HTTP body (%u bytes):", body.size());
-            std::string log_safe_body = body;
-            for (char &c : log_safe_body)
-            {
-                if (c == '\r')
-                    c = '\\'; // Escape carriage return
-                else if (c == '\n')
-                    c = 'n'; // Escape newline
-                else if (c < 32 || c >= 127)
-                    c = '?'; // Replace other non-printable chars
-            }
-            for (size_t i = 0; i < log_safe_body.size(); i += chunk_size)
-            {
-                std::string chunk = log_safe_body.substr(i, chunk_size);
-                ESP_LOGD(TAG, "Body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
-            }
-
-            return true;
+            ESP_LOGW(TAG, "Max redirects (%d) reached", max_redirects);
+            return false;
         }
 
         bool NetgearM5Component::extract_http_body_(const std::string &raw, std::string &body_out)
