@@ -1,34 +1,32 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, CONF_NAME, ICON_EMPTY, UNIT_EMPTY
 
 import esphome.components.sensor as sensor
 import esphome.components.text_sensor as text_sensor
 
+from esphome.const import CONF_ID
+
 AUTO_LOAD = ["sensor", "text_sensor"]
 CODEOWNERS = ["@you"]
 
+# C++ namespace/class (unchanged)
 netgear_m5_ns = cg.esphome_ns.namespace("netgear_m5")
 NetgearM5Component = netgear_m5_ns.class_("NetgearM5Component", cg.Component)
 
+# Config keys
 CONF_HOST = "host"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_SENSORS = "sensors"
 CONF_TEXT_SENSORS = "text_sensors"
 CONF_PATH = "path"
-CONF_UNIT = "unit"
-CONF_ICON = "icon"
 
-SENSOR_SCHEMA = sensor.SENSOR_SCHEMA.extend(
-    {
-        cv.Required(CONF_PATH): cv.string,
-    }
+# Use new schema builders (SENSOR_SCHEMA is deprecated)
+SENSOR_SCHEMA = sensor.sensor_schema().extend(
+    {cv.Required(CONF_PATH): cv.string}
 )
 
-TEXT_SENSOR_SCHEMA = text_sensor.TEXT_SENSOR_SCHEMA.extend(
-    {
-        cv.Required(CONF_PATH): cv.string,
-    }
+TEXT_SENSOR_SCHEMA = text_sensor.text_sensor_schema().extend(
+    {cv.Required(CONF_PATH): cv.string}
 )
 
 CONFIG_SCHEMA = cv.Schema(
@@ -49,11 +47,11 @@ async def to_code(config):
     cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
 
     # Numeric sensors
-    for s in config[CONF_SENSORS]:
-        sens = await sensor.new_sensor(s)
-        cg.add(var.bind_numeric_sensor(s[CONF_PATH], sens))
+    for s_conf in config[CONF_SENSORS]:
+        s = await sensor.new_sensor(s_conf)
+        cg.add(var.bind_numeric_sensor(s_conf[CONF_PATH], s))
 
     # Text sensors
-    for ts in config[CONF_TEXT_SENSORS]:
-        sens = await text_sensor.new_text_sensor(ts)
-        cg.add(var.bind_text_sensor(ts[CONF_PATH], sens))
+    for ts_conf in config[CONF_TEXT_SENSORS]:
+        ts = await text_sensor.new_text_sensor(ts_conf)
+        cg.add(var.bind_text_sensor(ts_conf[CONF_PATH], ts))
