@@ -33,6 +33,11 @@ class NetgearM5Component : public Component {
   void bind_binary_sensor(const std::string &json_path, binary_sensor::BinarySensor *s,
                           const std::string &on_value, const std::string &off_value);
 
+
+    void set_http_request(http_request::HttpRequestComponent *http_client) {
+        this->http_client_ = http_client;
+    }
+
  protected:
   static void task_trampoline_(void *param);
   void task_loop_();

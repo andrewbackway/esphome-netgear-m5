@@ -6,6 +6,7 @@ import esphome.components.text_sensor as text_sensor
 import esphome.components.binary_sensor as binary_sensor
 
 from esphome.const import CONF_ID
+from esphome.components import http_request 
 
 AUTO_LOAD = ["sensor", "text_sensor", "binary_sensor"]
 
@@ -37,6 +38,8 @@ CONFIG_SCHEMA = cv.Schema(
         cv.GenerateID(): cv.declare_id(NetgearM5Component),
         cv.Required(CONF_HOST): cv.string,
         cv.Optional(CONF_POLL_INTERVAL, default="30s"): cv.positive_time_period_milliseconds,
+        # Add the new required field to get the http_request component ID
+        cv.Required("http_request_id"): cv.use_id(http_request.HttpRequestComponent),
         cv.Optional(CONF_SENSORS, default=[]): cv.ensure_list(SENSOR_SCHEMA),
         cv.Optional(CONF_TEXT_SENSORS, default=[]): cv.ensure_list(TEXT_SENSOR_SCHEMA),
         cv.Optional(CONF_BINARY_SENSORS, default=[]): cv.ensure_list(BINARY_SENSOR_SCHEMA),
@@ -49,6 +52,10 @@ async def to_code(config):
     await cg.register_component(var, config)
     cg.add(var.set_host(config[CONF_HOST]))
     cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
+    
+     # Get the http_request component variable from the config and pass it to your C++ class
+    http_request_var = await cg.get_variable(config["http_request_id"])
+    cg.add(var.set_http_request(http_request_var))
 
     for s_conf in config[CONF_SENSORS]:
         s = await sensor.new_sensor(s_conf)

@@ -15,9 +15,6 @@ static const char *const TAG = "netgear_m5";
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
 
-  this->http_client_ = new http_request::HttpRequestComponent();
-  this->http_client_->set_parent(this);
-
   xTaskCreatePinnedToCore(
       &NetgearM5Component::task_trampoline_,
       "netgear_m5_task",
@@ -43,7 +40,6 @@ void NetgearM5Component::dump_config() {
 void NetgearM5Component::task_trampoline_(void *param) {
   static_cast<NetgearM5Component *>(param)->task_loop_();
 }
-
 void NetgearM5Component::task_loop_() {
   const TickType_t delay_ticks = pdMS_TO_TICKS(this->poll_interval_ms_);
   for (;;) {
@@ -52,55 +48,34 @@ void NetgearM5Component::task_loop_() {
       vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds before retrying
       continue;
     }
-    std::string raw;
-    if (this->fetch_once_(raw)) {
-      std::string body;
-      if (extract_http_body_(raw, body)) {
-        taskENTER_CRITICAL(&this->mux_);
-        this->last_payload_ = std::move(body);
-        this->has_new_payload_ = true;
-        taskEXIT_CRITICAL(&this->mux_);
-      }
-    }
+    
+    std::string url = "http://" + this->host_ + "/api/model.json?internalapi=1";
+    
+    // The `send` method is non-blocking. The code will continue immediately.
+    // The response is handled in the lambda function.
+    this->http_client_->send(
+        http_request::RequestOptions{
+            .method = http_request::Method::GET,
+            .url = url,
+            .timeout = 5000  // ms
+        },
+        [this](http_request::HttpRequestResponse r) {
+            if (r.status_code == 200 && r.body.has_value()) {
+                std::string body = *r.body;
+                
+                taskENTER_CRITICAL(&this->mux_);
+                this->last_payload_ = std::move(body);
+                this->has_new_payload_ = true;
+                taskEXIT_CRITICAL(&this->mux_);
+            } else {
+                ESP_LOGW(TAG, "HTTP request failed, code %d", r.status_code);
+            }
+        });
+
     vTaskDelay(delay_ticks);
   }
 }
 
-bool NetgearM5Component::fetch_once_(std::string &body) {
-  if (!this->http_client_) {
-    ESP_LOGE(TAG, "HTTP client not initialized");
-    return false;
-  }
-
-  std::string url = "http://" + this->host_ + "/api/model.json?internalapi=1";
-  bool success = false;
-
-  http_request::HttpRequestResponse resp;
-  this->http_client_->send(
-      http_request::RequestOptions{
-          .method = http_request::Method::GET,
-          .url = url,
-          .timeout = 5000  // ms
-      },
-      [&](http_request::HttpRequestResponse r) {
-        if (r.status_code == 200 && r.body.has_value()) {
-          body = *r.body;
-          success = true;
-        } else {
-          ESP_LOGW(TAG, "HTTP request failed, code %d", r.status_code);
-        }
-      });
-
-  return success;
-}
-
-
-bool NetgearM5Component::extract_http_body_(const std::string &raw, std::string &body_out) {
-  auto pos = raw.find("\r\n\r\n");
-  if (pos == std::string::npos) return false;
-  body_out.assign(raw.begin() + pos + 4, raw.end());
-  return true;
-}
 
 void NetgearM5Component::publish_pending_() {
   std::string payload;
