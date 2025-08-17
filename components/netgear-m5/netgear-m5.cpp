@@ -225,7 +225,6 @@ std::string NetgearM5Component::dotted_lookup_(const std::string &path, const ::
   serializeJson(cur, out);
   return out;
 }
-
 void NetgearM5Component::bind_numeric_sensor(const std::string &json_path, sensor::Sensor *s) {
   this->num_bindings_.push_back({json_path, s});
 }
