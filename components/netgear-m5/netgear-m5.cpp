@@ -160,7 +160,7 @@ namespace esphome
                 }
                 lwip_close(sock);
 
-                // Log full response, escaping newlines
+                /* Log full response, escaping newlines
                 ESP_LOGD(TAG, "Full HTTP response (%u bytes):", rx.size());
                 std::string log_safe_rx = rx;
                 for (char &c : log_safe_rx)
@@ -178,6 +178,7 @@ namespace esphome
                     std::string chunk = log_safe_rx.substr(i, chunk_size);
                     ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
                 }
+                */
 
                 // Find header/body split
                 auto header_end = rx.find("\r\n\r\n");
@@ -282,7 +283,7 @@ namespace esphome
                     body = body_part;
                 }
 
-                // Log body, escaping newlines
+                /* Log body, escaping newlines
                 ESP_LOGD(TAG, "Extracted HTTP body (%u bytes):", body.size());
                 std::string log_safe_body = body;
                 for (char &c : log_safe_body)
@@ -299,6 +300,7 @@ namespace esphome
                     std::string chunk = log_safe_body.substr(i, chunk_size);
                     ESP_LOGD(TAG, "Body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
                 }
+                */
 
                 return true;
             }
