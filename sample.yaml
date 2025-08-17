@@ -16,25 +16,31 @@ netgear-m5:
   host: mywebui.net
   poll_interval: 5s
 
-  sensors:
-  - name: Battery Level
-    path: power.battChargeLevel
-    unit: "%"
-  - name: Device Temperature
-    path: general.devTemperature
-    unit: "°C"
-  - name: WWAN RSSI
-    path: wwan.signalStrength.rssi
-    unit: "dBm"
-  - name: WWAN RSRP
-    path: wwan.signalStrength.rsrp
-    unit: "dBm"
-  - name: WWAN RSRQ
-    path: wwan.signalStrength.rsrq
-    unit: "dB"
-  - name: WiFi Clients
-    path: wifi.clientCount
+  sensors: 
+    - name: Battery Level
+      path: power.battChargeLevel
+      unit_of_measurement: "%"
+    - name: Device Temperature
+      path: general.devTemperature
+      unit_of_measurement: "°C"
+    - name: WWAN RSSI
+      path: wwan.signalStrength.rssi
+      unit_of_measurement: "dBm"
+    - name: WWAN RSRP
+      path: wwan.signalStrength.rsrp
+      unit_of_measurement: "dBm"
+    - name: WWAN RSRQ
+      path: wwan.signalStrength.rsrq
+      unit_of_measurement: "dB"
+    - name: WiFi Clients
+      path: wifi.clientCount
 
-text_sensors:
-  - name: Device Model
-    path: general.model
+  text_sensors: 
+    - name: Device Model
+      path: general.model
+
+  binary_sensors:
+    - name: WAN Connected
+      path: wan.state
+      on_value: "up"
+      off_value: "down"

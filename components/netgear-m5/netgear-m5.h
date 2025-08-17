@@ -2,6 +2,9 @@
 
 #include "esphome.h"
 #include "esphome/core/log.h"
+#include "esphome/components/sensor/sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
+#include "esphome/components/binary_sensor/binary_sensor.h"
 
 #include <string>
 #include <vector>
@@ -27,7 +30,8 @@ class NetgearM5Component : public Component {
 
   void bind_numeric_sensor(const std::string &json_path, sensor::Sensor *s);
   void bind_text_sensor(const std::string &json_path, text_sensor::TextSensor *s);
-
+  void bind_binary_sensor(const std::string &json_path, binary_sensor::BinarySensor *s,
+                          const std::string &on_value, const std::string &off_value);
  protected:
   static void task_trampoline_(void *param);
   void task_loop_();
@@ -46,8 +50,20 @@ class NetgearM5Component : public Component {
 
   struct NumBinding { std::string path; sensor::Sensor *sensor{nullptr}; };
   struct TextBinding { std::string path; text_sensor::TextSensor *sensor{nullptr}; };
+  struct BinBinding { std::string path; binary_sensor::BinarySensor *sensor{nullptr}; };
+
+    
+
+  struct BinBinding {
+    std::string path;
+    binary_sensor::BinarySensor *sensor{nullptr};
+    std::string on_value{"true"};
+    std::string off_value{"false"};
+  };
+
   std::vector<NumBinding> num_bindings_;
   std::vector<TextBinding> text_bindings_;
+  std::vector<BinBinding> bin_bindings_;
 };
 
 }  // namespace netgear_m5
