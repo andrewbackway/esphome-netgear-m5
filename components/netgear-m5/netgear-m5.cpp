@@ -9,7 +9,8 @@ namespace esphome
 {
     namespace netgear_m5
     {
-
+        static const char *const TAG = "netgear-m5";
+        
         void NetgearM5Component::publish_pending_()
         {
             std::string payload;
