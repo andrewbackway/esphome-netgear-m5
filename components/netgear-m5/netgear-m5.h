@@ -6,6 +6,8 @@
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 
+#include "esphome/components/network/network.h"
+
 #include <string>
 #include <vector>
 

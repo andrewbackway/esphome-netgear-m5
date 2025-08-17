@@ -10,13 +10,23 @@ namespace netgear_m5 {
 static const char *const TAG = "netgear_m5";
 
 void NetgearM5Component::setup() {
+  ESP_LOGD(TAG, "Setting up Netgear M5 component");
+  // Wait for Wi-Fi connection
+  for (int i = 0; i < 30 && !network::is_connected(); i++) {
+    ESP_LOGD(TAG, "Waiting for Wi-Fi connection (%d/30)...", i + 1);
+    delay(1000);
+  }
+  if (!network::is_connected()) {
+    ESP_LOGE(TAG, "Wi-Fi not connected, cannot start Netgear M5 task");
+    return;
+  }
   xTaskCreatePinnedToCore(
-      &NetgearM5Component::task_trampoline_, 
+      &NetgearM5Component::task_trampoline_,
       "netgear_m5_task",
-      8192, 
-      this, 
-      4, 
-      &this->task_handle_, 
+      12288, // Increased stack size from previous recommendation
+      this,
+      4,
+      &this->task_handle_,
       1);
 }
 
@@ -39,6 +49,11 @@ void NetgearM5Component::task_trampoline_(void *param) {
 void NetgearM5Component::task_loop_() {
   const TickType_t delay_ticks = pdMS_TO_TICKS(this->poll_interval_ms_);
   for (;;) {
+    if (!network::is_connected()) {
+      ESP_LOGW(TAG, "Network not connected, skipping fetch");
+      vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds before retrying
+      continue;
+    }
     std::string raw;
     if (this->fetch_once_(raw)) {
       std::string body;
