@@ -49,21 +49,30 @@ void NetgearM5Component::task_loop_() {
       vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
     }
-    
+
     std::string url = "http://" + this->host_ + "/api/model.json?internalapi=1";
+
+    // Use the perform method to get an HttpContainer.
+    std::shared_ptr<http_request::HttpContainer> container = this->http_client_->perform(url, "GET", "", {}, {});
+
+    // Check if the request was successful and we have a valid container.
+    if (container && container->get_status_code() == 200) {
+      std::string body = container->get_response_as_string();
+      if (!body.empty()) {
+        ESP_LOGD(TAG, "Received response body: %s", body.c_str());
+
+        // Process the response body.
+        taskENTER_CRITICAL(&this->mux_);
+        this->last_payload_ = body;
+        this->has_new_payload_ = true;
+        taskEXIT_CRITICAL(&this->mux_);
+      } else {
+        ESP_LOGW(TAG, "Received empty response body");
+      }
+    } else {
+      ESP_LOGW(TAG, "HTTP request failed, status code: %d", container ? container->get_status_code() : -1);
+    }
     
-    this->http_client_->make_request(
-        url,
-        esphome::http_request::HttpRequestMethod::HTTP_GET,
-        [this](const std::string &body) {
-            ESP_LOGD(TAG, "Received response body: %s", body.c_str());
-
-            taskENTER_CRITICAL(&this->mux_);
-            this->last_payload_ = body;
-            this->has_new_payload_ = true;
-            taskEXIT_CRITICAL(&this->mux_);
-        });
-
     vTaskDelay(delay_ticks);
   }
 }
