@@ -1,0 +1,40 @@
+esphome:
+  name: mywebui_bridge
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+external_components:
+ - source: github://andrewbackway/esphome-netgear-m5
+   refresh: 1s
+
+logger:
+
+netgear-m5:
+  host: mywebui.net
+  poll_interval: 5s
+
+  sensors:
+  - name: Battery Level
+    path: power.battChargeLevel
+    unit: "%"
+  - name: Device Temperature
+    path: general.devTemperature
+    unit: "°C"
+  - name: WWAN RSSI
+    path: wwan.signalStrength.rssi
+    unit: "dBm"
+  - name: WWAN RSRP
+    path: wwan.signalStrength.rsrp
+    unit: "dBm"
+  - name: WWAN RSRQ
+    path: wwan.signalStrength.rsrq
+    unit: "dB"
+  - name: WiFi Clients
+    path: wifi.clientCount
+
+text_sensors:
+  - name: Device Model
+    path: general.model
