@@ -12,6 +12,8 @@
 extern "C" {
   #include <freertos/FreeRTOS.h>
   #include <freertos/task.h>
+  #include <lwip/sockets.h>
+  #include <lwip/netdb.h>
 }
 
 namespace esphome {
@@ -30,12 +32,6 @@ class NetgearM5Component : public Component {
   void bind_text_sensor(const std::string &json_path, text_sensor::TextSensor *s);
   void bind_binary_sensor(const std::string &json_path, binary_sensor::BinarySensor *s,
                           const std::string &on_value, const std::string &off_value);
-
-
-    void set_http_request(http_request::HttpRequestComponent *http_client) {
-        this->http_client_ = http_client;
-    }
-
  protected:
   static void task_trampoline_(void *param);
   void task_loop_();
@@ -51,9 +47,6 @@ class NetgearM5Component : public Component {
   volatile bool has_new_payload_{false};
   std::string last_payload_;
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
-
-  // ESPHome HTTP client
-  http_request::HttpRequestComponent *http_client_{nullptr};
 
   struct NumBinding { std::string path; sensor::Sensor *sensor{nullptr}; };
   struct TextBinding { std::string path; text_sensor::TextSensor *sensor{nullptr}; };
