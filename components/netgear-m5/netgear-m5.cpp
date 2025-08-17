@@ -172,7 +172,7 @@ namespace esphome
                     else if (c < 32 || c >= 127)
                         c = '?';
                 }
-                const size_t chunk_size = 256;
+                const size_t chunk_size = 64;
                 for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
                 {
                     std::string chunk = log_safe_rx.substr(i, chunk_size);
