@@ -163,7 +163,7 @@ namespace esphome
                 else if (c < 32 || c >= 127)
                     c = '?'; // Replace other non-printable chars
             }
-            const size_t chunk_size = 128; // Smaller chunks for better log readability
+            const size_t chunk_size = 50; // Smaller chunks for better log readability
             for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
             {
                 std::string chunk = log_safe_rx.substr(i, chunk_size);
