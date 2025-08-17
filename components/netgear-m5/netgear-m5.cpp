@@ -54,7 +54,10 @@ void NetgearM5Component::task_loop_() {
 }
 
 bool NetgearM5Component::fetch_once_(std::string &body) {
-  if (this->host_.empty()) return false;
+  if (this->host_.empty()) {
+    ESP_LOGW(TAG, "Host is empty, cannot fetch data");
+    return false;
+  }
 
   const char *port = "80";
   const char *path = "/api/model.json?internalapi=1";
@@ -64,40 +67,80 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
   hints.ai_socktype = SOCK_STREAM;
 
   struct addrinfo *res = nullptr;
+  ESP_LOGD(TAG, "Resolving host: %s", this->host_.c_str());
   int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
-  if (err != 0 || res == nullptr) return false;
+  if (err != 0 || res == nullptr) {
+    ESP_LOGW(TAG, "DNS resolution failed for %s: %s", this->host_.c_str(), gai_strerror(err));
+    if (res) freeaddrinfo(res);
+    return false;
+  }
 
   int sock = -1;
   for (struct addrinfo *p = res; p != nullptr; p = p->ai_next) {
     sock = lwip_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (sock < 0) continue;
+    if (sock < 0) {
+      ESP_LOGW(TAG, "Failed to create socket: %d", errno);
+      continue;
+    }
 
-    struct timeval tv{.tv_sec=5, .tv_usec=0};
-    lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    lwip_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    struct timeval tv{.tv_sec = 5, .tv_usec = 0};
+    if (lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+      ESP_LOGW(TAG, "Failed to set receive timeout: %d", errno);
+      lwip_close(sock);
+      sock = -1;
+      continue;
+    }
+    if (lwip_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
+      ESP_LOGW(TAG, "Failed to set send timeout: %d", errno);
+      lwip_close(sock);
+      sock = -1;
+      continue;
+    }
 
-    if (lwip_connect(sock, p->ai_addr, p->ai_addrlen) == 0) break;
+    ESP_LOGD(TAG, "Connecting to %s:%s", this->host_.c_str(), port);
+    if (lwip_connect(sock, p->ai_addr, p->ai_addrlen) == 0) {
+      break;
+    }
+    ESP_LOGW(TAG, "Connection failed: %d", errno);
     lwip_close(sock);
     sock = -1;
   }
   freeaddrinfo(res);
-  if (sock < 0) return false;
+  if (sock < 0) {
+    ESP_LOGW(TAG, "Failed to connect to %s:%s", this->host_.c_str(), port);
+    return false;
+  }
 
-  std::string req = "GET " + std::string(path) + " HTTP/1.1\r\n" + 
-                    "Host: " + this->host_ + "\r\n" + 
+  std::string req = "GET " + std::string(path) + " HTTP/1.1\r\n" +
+                    "Host: " + this->host_ + "\r\n" +
                     "User-Agent: ESPHome-NetgearM5/1.0\r\n" +
-                    "Connection: close\r\n" + 
-                    "Accept: application/json\r\n" + 
+                    "Connection: close\r\n" +
+                    "Accept: application/json\r\n" +
                     "\r\n";
-  lwip_send(sock, req.data(), req.size(), 0);
+  ESP_LOGD(TAG, "Sending HTTP request to %s", this->host_.c_str());
+  int sent = lwip_send(sock, req.data(), req.size(), 0);
+  if (sent < 0) {
+    ESP_LOGW(TAG, "Failed to send request: %d", errno);
+    lwip_close(sock);
+    return false;
+  }
 
   char buf[1024];
   std::string rx;
+  rx.reserve(4096); // Reserve space for typical response size
   for (;;) {
-    int n = lwip_recv(sock, buf, sizeof(buf), 0);
-    if (n <= 0) break;
-    rx.append(buf, buf + n);
+    int n = lwip_recv(sock, buf, sizeof(buf) - 1, 0);
+    if (n < 0) {
+      ESP_LOGW(TAG, "Receive failed: %d", errno);
+      break;
+    }
+    if (n == 0) {
+      break; // Connection closed
+    }
+    buf[n] = '\0'; // Null-terminate for safety
+    rx.append(buf, n);
   }
+  ESP_LOGD(TAG, "Received %u bytes from %s", rx.size(), this->host_.c_str());
   lwip_close(sock);
 
   body.swap(rx);
