@@ -50,10 +50,6 @@ class NetgearM5Component : public Component {
 
   struct NumBinding { std::string path; sensor::Sensor *sensor{nullptr}; };
   struct TextBinding { std::string path; text_sensor::TextSensor *sensor{nullptr}; };
-  struct BinBinding { std::string path; binary_sensor::BinarySensor *sensor{nullptr}; };
-
-    
-
   struct BinBinding {
     std::string path;
     binary_sensor::BinarySensor *sensor{nullptr};
