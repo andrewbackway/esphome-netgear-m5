@@ -15,7 +15,7 @@ void NetgearM5Component::setup() {
   xTaskCreatePinnedToCore(
       &NetgearM5Component::task_trampoline_,
       "netgear_m5_task",
-      12288, // Increased stack size
+      8192,
       this,
       4,
       &this->task_handle_,
@@ -61,6 +61,8 @@ void NetgearM5Component::task_loop_() {
 }
 
 bool NetgearM5Component::fetch_once_(std::string &body) {
+  ESP_LOGD(TAG, "Fetching data from Netgear M5");
+
   if (this->host_.empty()) {
     ESP_LOGW(TAG, "Host is empty, cannot fetch data");
     return false;
@@ -86,6 +88,8 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     if (res) freeaddrinfo(res);
     return false;
   }
+
+  ESP_LOGD(TAG, "Resolved %s to %d addresses", this->host_.c_str(), 1 + (res->ai_next != nullptr));
 
   int sock = -1;
   for (struct addrinfo *p = res; p != nullptr; p = p->ai_next) {
@@ -122,6 +126,8 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     ESP_LOGW(TAG, "Failed to connect to %s:%s", this->host_.c_str(), port);
     return false;
   }
+
+  ESP_LOGD(TAG, "Creating HTTP request");
 
   std::string req = "GET " + std::string(path) + " HTTP/1.1\r\n" +
                     "Host: " + this->host_ + "\r\n" +
