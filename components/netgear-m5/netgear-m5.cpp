@@ -4,6 +4,8 @@
 #include <string>
 #include <ArduinoJson.h>  
 
+#include "esphome/components/http_request/http_request.h"
+
 namespace esphome {
 namespace netgear_m5 {
 
@@ -60,8 +62,24 @@ void NetgearM5Component::task_loop_() {
   }
 }
 
+
+
 bool NetgearM5Component::fetch_once_(std::string &body) {
   ESP_LOGD(TAG, "Fetching data from Netgear M5");
+
+   // Example: Sending a GET request to a public API
+        esphome::http_request::HttpRequest::Builder()
+            .with_url("http://mywebui.net/api/model.json")
+            .with_method(esphome::http_request::HTTP_GET)
+            .on_response([this](esphome::http_request::HttpResponse *response) {
+                if (response->status_code == 200) {
+                    ESP_LOGI("MyExternalComponent", "API call successful: %s", response->body.c_str());
+                    // Process the response body here
+                } else {
+                    ESP_LOGE("MyExternalComponent", "API call failed with status code: %d", response->status_code);
+                }
+            })
+            .send();
 
   if (this->host_.empty()) {
     ESP_LOGW(TAG, "Host is empty, cannot fetch data");
