@@ -1,4 +1,4 @@
-#include "netgear_m5.h"
+#include "netgear-sm5.h"
 
 #include <cstring>
 #include <string>
