@@ -325,251 +325,252 @@ namespace esphome
 
                 return true;
             }
+        }
 
-            bool NetgearM5Component::extract_http_body_(const std::string &raw, std::string &body_out)
+        bool NetgearM5Component::extract_http_body_(const std::string &raw, std::string &body_out)
+        {
+            auto pos = raw.find("\r\n\r\n");
+            if (pos == std::string::npos)
+                return false;
+            body_out.assign(raw.begin() + pos + 4, raw.end());
+            return true;
+        }
+
+        void NetgearM5Component::publish_pending_()
+        {
+            std::string payload;
+            taskENTER_CRITICAL(&this->mux_);
+            payload.swap(this->last_payload_);
+            this->has_new_payload_ = false;
+            taskEXIT_CRITICAL(&this->mux_);
+            if (payload.empty())
             {
-                auto pos = raw.find("\r\n\r\n");
-                if (pos == std::string::npos)
-                    return false;
-                body_out.assign(raw.begin() + pos + 4, raw.end());
-                return true;
+                ESP_LOGD(TAG, "No payload to process");
+                return;
             }
 
-            void NetgearM5Component::publish_pending_()
+            // Log the raw payload for debugging
+            std::string log_safe_payload = payload;
+            for (char &c : log_safe_payload)
             {
-                std::string payload;
-                taskENTER_CRITICAL(&this->mux_);
-                payload.swap(this->last_payload_);
-                this->has_new_payload_ = false;
-                taskEXIT_CRITICAL(&this->mux_);
-                if (payload.empty())
-                {
-                    ESP_LOGD(TAG, "No payload to process");
-                    return;
-                }
+                if (c == '\r')
+                    c = '\\';
+                else if (c == '\n')
+                    c = 'n';
+                else if (c < 32 || c >= 127)
+                    c = '?';
+            }
+            ESP_LOGD(TAG, "Raw JSON payload (%u bytes): %s", payload.size(), log_safe_payload.c_str());
 
-                // Log the raw payload for debugging
-                std::string log_safe_payload = payload;
-                for (char &c : log_safe_payload)
-                {
-                    if (c == '\r')
-                        c = '\\';
-                    else if (c == '\n')
-                        c = 'n';
-                    else if (c < 32 || c >= 127)
-                        c = '?';
-                }
-                ESP_LOGD(TAG, "Raw JSON payload (%u bytes): %s", payload.size(), log_safe_payload.c_str());
+            ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
+            StaticJsonDocument<8192> doc;
+            DeserializationError err = deserializeJson(doc, payload);
+            if (err)
+            {
+                ESP_LOGW(TAG, "JSON parse failed in publish_pending_: %s (payload size: %u bytes)", err.c_str(), payload.size());
+                return;
+            }
+            ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
 
-                ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
-                StaticJsonDocument<8192> doc;
-                DeserializationError err = deserializeJson(doc, payload);
-                if (err)
-                {
-                    ESP_LOGW(TAG, "JSON parse failed in publish_pending_: %s (payload size: %u bytes)", err.c_str(), payload.size());
-                    return;
-                }
-                ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
+            // Log the entire parsed JSON
+            std::string parsed_json;
+            serializeJson(doc, parsed_json);
+            for (char &c : parsed_json)
+            {
+                if (c == '\r')
+                    c = '\\';
+                else if (c == '\n')
+                    c = 'n';
+                else if (c < 32 || c >= 127)
+                    c = '?';
+            }
+            ESP_LOGD(TAG, "Parsed JSON (%u bytes): %s", parsed_json.size(), parsed_json.c_str());
 
-                // Log the entire parsed JSON
-                std::string parsed_json;
-                serializeJson(doc, parsed_json);
-                for (char &c : parsed_json)
-                {
-                    if (c == '\r')
-                        c = '\\';
-                    else if (c == '\n')
-                        c = 'n';
-                    else if (c < 32 || c >= 127)
-                        c = '?';
-                }
-                ESP_LOGD(TAG, "Parsed JSON (%u bytes): %s", parsed_json.size(), parsed_json.c_str());
+            // Check if doc is an object
+            if (!doc.is<JsonObject>())
+            {
+                ESP_LOGW(TAG, "Parsed JSON is not an object: %s", parsed_json.c_str());
+                return;
+            }
 
-                // Check if doc is an object
-                if (!doc.is<JsonObject>())
-                {
-                    ESP_LOGW(TAG, "Parsed JSON is not an object: %s", parsed_json.c_str());
-                    return;
-                }
+            // Use the entire document as root
+            auto root = doc.as<ArduinoJson::JsonObjectConst>();
 
-                // Use the entire document as root
-                auto root = doc.as<ArduinoJson::JsonObjectConst>();
-
-                // Numeric sensors
-                for (auto &b : this->num_bindings_)
+            // Numeric sensors
+            for (auto &b : this->num_bindings_)
+            {
+                if (!b.sensor)
+                    continue;
+                std::string v = dotted_lookup_(b.path, root);
+                ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(), v.c_str());
+                if (!v.empty())
                 {
-                    if (!b.sensor)
-                        continue;
-                    std::string v = dotted_lookup_(b.path, root);
-                    ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(), v.c_str());
-                    if (!v.empty())
+                    char *endptr;
+                    errno = 0;
+                    double value = strtod(v.c_str(), &endptr);
+                    if (endptr == v.c_str() || *endptr != '\0' || errno == ERANGE)
                     {
-                        char *endptr;
-                        errno = 0;
-                        double value = strtod(v.c_str(), &endptr);
-                        if (endptr == v.c_str() || *endptr != '\0' || errno == ERANGE)
-                        {
-                            ESP_LOGW(TAG, "Invalid numeric value at %s: %s", b.path.c_str(), v.c_str());
-                            continue;
-                        }
-                        b.sensor->publish_state(value);
-                    }
-                }
-
-                // Text sensors
-                for (auto &b : this->text_bindings_)
-                {
-                    if (!b.sensor)
+                        ESP_LOGW(TAG, "Invalid numeric value at %s: %s", b.path.c_str(), v.c_str());
                         continue;
-                    std::string v = dotted_lookup_(b.path, root);
-                    ESP_LOGD(TAG, "Text sensor path %s: value %s", b.path.c_str(), v.c_str());
-                    if (!v.empty())
-                        b.sensor->publish_state(v);
-                }
-
-                // Binary sensors
-                for (auto &b : this->bin_bindings_)
-                {
-                    if (!b.sensor)
-                        continue;
-                    std::string v = dotted_lookup_(b.path, root);
-                    ESP_LOGD(TAG, "Binary sensor path %s: value %s (on: %s, off: %s)", b.path.c_str(), v.c_str(), b.on_value.c_str(), b.off_value.c_str());
-                    if (v == b.on_value)
-                    {
-                        b.sensor->publish_state(true);
                     }
-                    else if (v == b.off_value)
-                    {
-                        b.sensor->publish_state(false);
-                    }
+                    b.sensor->publish_state(value);
                 }
             }
-            
-            std::string NetgearM5Component::dotted_lookup_(const std::string &path, const ::ArduinoJson::JsonVariantConst &root)
+
+            // Text sensors
+            for (auto &b : this->text_bindings_)
             {
-                ESP_LOGD(TAG, "Looking up path: %s", path.c_str());
+                if (!b.sensor)
+                    continue;
+                std::string v = dotted_lookup_(b.path, root);
+                ESP_LOGD(TAG, "Text sensor path %s: value %s", b.path.c_str(), v.c_str());
+                if (!v.empty())
+                    b.sensor->publish_state(v);
+            }
 
-                ::ArduinoJson::JsonVariantConst cur = root;
-                size_t i = 0;
-
-                // Log the root JSON for debugging
-                std::string root_json;
-                serializeJson(root, root_json);
-                ESP_LOGD(TAG, "Root JSON: %s", root_json.c_str());
-
-                while (i < path.size())
+            // Binary sensors
+            for (auto &b : this->bin_bindings_)
+            {
+                if (!b.sensor)
+                    continue;
+                std::string v = dotted_lookup_(b.path, root);
+                ESP_LOGD(TAG, "Binary sensor path %s: value %s (on: %s, off: %s)", b.path.c_str(), v.c_str(), b.on_value.c_str(), b.off_value.c_str());
+                if (v == b.on_value)
                 {
-                    size_t dot = path.find('.', i);
-                    std::string token = path.substr(i, dot == std::string::npos ? std::string::npos : dot - i);
-                    ESP_LOGD(TAG, "Processing token: %s", token.c_str());
+                    b.sensor->publish_state(true);
+                }
+                else if (v == b.off_value)
+                {
+                    b.sensor->publish_state(false);
+                }
+            }
+        }
 
-                    size_t lb = token.find('[');
-                    if (lb != std::string::npos && token.back() == ']')
-                    {
-                        std::string key = token.substr(0, lb);
-                        std::string index_str = token.substr(lb + 1, token.size() - lb - 2);
-                        int index = atoi(index_str.c_str());
-                        ESP_LOGD(TAG, "Array access: key=%s, index=%d", key.c_str(), index);
+        std::string NetgearM5Component::dotted_lookup_(const std::string &path, const ::ArduinoJson::JsonVariantConst &root)
+        {
+            ESP_LOGD(TAG, "Looking up path: %s", path.c_str());
 
-                        if (!key.empty())
-                        {
-                            auto next = cur[key.c_str()];
-                            if (next.isNull())
-                            {
-                                ESP_LOGW(TAG, "Key not found: %s", key.c_str());
-                                return {};
-                            }
-                            cur = next;
-                        }
-                        if (!cur.is<ArduinoJson::JsonArrayConst>())
-                        {
-                            ESP_LOGW(TAG, "Not an array at key: %s", key.c_str());
-                            return {};
-                        }
-                        auto arr = cur.as<ArduinoJson::JsonArrayConst>();
-                        if (index < 0 || static_cast<size_t>(index) >= arr.size())
-                        {
-                            ESP_LOGW(TAG, "Invalid array index: %d (array size: %u)", index, arr.size());
-                            return {};
-                        }
-                        cur = arr[index];
-                    }
-                    else
+            ::ArduinoJson::JsonVariantConst cur = root;
+            size_t i = 0;
+
+            // Log the root JSON for debugging
+            std::string root_json;
+            serializeJson(root, root_json);
+            ESP_LOGD(TAG, "Root JSON: %s", root_json.c_str());
+
+            while (i < path.size())
+            {
+                size_t dot = path.find('.', i);
+                std::string token = path.substr(i, dot == std::string::npos ? std::string::npos : dot - i);
+                ESP_LOGD(TAG, "Processing token: %s", token.c_str());
+
+                size_t lb = token.find('[');
+                if (lb != std::string::npos && token.back() == ']')
+                {
+                    std::string key = token.substr(0, lb);
+                    std::string index_str = token.substr(lb + 1, token.size() - lb - 2);
+                    int index = atoi(index_str.c_str());
+                    ESP_LOGD(TAG, "Array access: key=%s, index=%d", key.c_str(), index);
+
+                    if (!key.empty())
                     {
-                        auto next = cur[token.c_str()];
+                        auto next = cur[key.c_str()];
                         if (next.isNull())
                         {
-                            ESP_LOGW(TAG, "Key not found: %s", token.c_str());
+                            ESP_LOGW(TAG, "Key not found: %s", key.c_str());
                             return {};
                         }
                         cur = next;
                     }
-
-                    if (dot == std::string::npos)
-                        break;
-                    i = dot + 1;
+                    if (!cur.is<ArduinoJson::JsonArrayConst>())
+                    {
+                        ESP_LOGW(TAG, "Not an array at key: %s", key.c_str());
+                        return {};
+                    }
+                    auto arr = cur.as<ArduinoJson::JsonArrayConst>();
+                    if (index < 0 || static_cast<size_t>(index) >= arr.size())
+                    {
+                        ESP_LOGW(TAG, "Invalid array index: %d (array size: %u)", index, arr.size());
+                        return {};
+                    }
+                    cur = arr[index];
                 }
-
-                if (cur.isNull())
+                else
                 {
-                    ESP_LOGW(TAG, "Final value is null for path: %s", path.c_str());
-                    return {};
-                }
-
-                if (cur.is<const char *>())
-                {
-                    std::string result = cur.as<const char *>();
-                    ESP_LOGD(TAG, "Found string value: %s", result.c_str());
-                    return result;
-                }
-                if (cur.is<int>())
-                {
-                    std::string result = std::to_string(cur.as<int>());
-                    ESP_LOGD(TAG, "Found int value: %s", result.c_str());
-                    return result;
-                }
-                if (cur.is<long>())
-                {
-                    std::string result = std::to_string(cur.as<long>());
-                    ESP_LOGD(TAG, "Found long value: %s", result.c_str());
-                    return result;
-                }
-                if (cur.is<double>())
-                {
-                    std::string result = std::to_string(cur.as<double>());
-                    ESP_LOGD(TAG, "Found double value: %s", result.c_str());
-                    return result;
-                }
-                if (cur.is<bool>())
-                {
-                    std::string result = cur.as<bool>() ? "true" : "false";
-                    ESP_LOGD(TAG, "Found bool value: %s", result.c_str());
-                    return result;
+                    auto next = cur[token.c_str()];
+                    if (next.isNull())
+                    {
+                        ESP_LOGW(TAG, "Key not found: %s", token.c_str());
+                        return {};
+                    }
+                    cur = next;
                 }
 
-                std::string out;
-                serializeJson(cur, out);
-                ESP_LOGD(TAG, "Found complex value: %s", out.c_str());
-                return out;
+                if (dot == std::string::npos)
+                    break;
+                i = dot + 1;
             }
 
-            void NetgearM5Component::bind_numeric_sensor(const std::string &json_path, sensor::Sensor *s)
+            if (cur.isNull())
             {
-                this->num_bindings_.push_back({json_path, s});
+                ESP_LOGW(TAG, "Final value is null for path: %s", path.c_str());
+                return {};
             }
 
-            void NetgearM5Component::bind_text_sensor(const std::string &json_path, text_sensor::TextSensor *s)
+            if (cur.is<const char *>())
             {
-                this->text_bindings_.push_back({json_path, s});
+                std::string result = cur.as<const char *>();
+                ESP_LOGD(TAG, "Found string value: %s", result.c_str());
+                return result;
             }
-
-            void NetgearM5Component::bind_binary_sensor(const std::string &json_path,
-                                                        binary_sensor::BinarySensor *s,
-                                                        const std::string &on_value,
-                                                        const std::string &off_value)
+            if (cur.is<int>())
             {
-                this->bin_bindings_.push_back({json_path, s, on_value, off_value});
+                std::string result = std::to_string(cur.as<int>());
+                ESP_LOGD(TAG, "Found int value: %s", result.c_str());
+                return result;
+            }
+            if (cur.is<long>())
+            {
+                std::string result = std::to_string(cur.as<long>());
+                ESP_LOGD(TAG, "Found long value: %s", result.c_str());
+                return result;
+            }
+            if (cur.is<double>())
+            {
+                std::string result = std::to_string(cur.as<double>());
+                ESP_LOGD(TAG, "Found double value: %s", result.c_str());
+                return result;
+            }
+            if (cur.is<bool>())
+            {
+                std::string result = cur.as<bool>() ? "true" : "false";
+                ESP_LOGD(TAG, "Found bool value: %s", result.c_str());
+                return result;
             }
 
-        } // namespace netgear_m5
-    } // namespace esphome
+            std::string out;
+            serializeJson(cur, out);
+            ESP_LOGD(TAG, "Found complex value: %s", out.c_str());
+            return out;
+        }
+
+        void NetgearM5Component::bind_numeric_sensor(const std::string &json_path, sensor::Sensor *s)
+        {
+            this->num_bindings_.push_back({json_path, s});
+        }
+
+        void NetgearM5Component::bind_text_sensor(const std::string &json_path, text_sensor::TextSensor *s)
+        {
+            this->text_bindings_.push_back({json_path, s});
+        }
+
+        void NetgearM5Component::bind_binary_sensor(const std::string &json_path,
+                                                    binary_sensor::BinarySensor *s,
+                                                    const std::string &on_value,
+                                                    const std::string &off_value)
+        {
+            this->bin_bindings_.push_back({json_path, s, on_value, off_value});
+        }
+
+    } // namespace netgear_m5
+} // namespace esphome
