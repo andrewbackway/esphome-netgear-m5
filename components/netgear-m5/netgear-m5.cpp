@@ -72,7 +72,7 @@ namespace esphome
             }
         }
 
-        bool fetch_once_(std::string &body)
+        bool NetgearM5Component::fetch_once_(std::string &body)
         {
             ESP_LOGD(TAG, "Fetching data from Netgear M5");
 
