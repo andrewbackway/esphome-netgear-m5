@@ -2,15 +2,13 @@
 
 #include <cstring>
 #include <string>
-#include <ArduinoJson.h>
+#include <ArduinoJson.h> // Use ArduinoJson 7
 #include <cstdlib>
 
 namespace esphome
 {
     namespace netgear_m5
     {
-
-        // ... [unchanged setup, loop, task, fetch_once_, extract_http_body_ etc.] ...
 
         void NetgearM5Component::publish_pending_()
         {
@@ -22,8 +20,9 @@ namespace esphome
             if (payload.empty())
                 return;
 
-            ArduinoJson::JsonDocument doc(131072);
-            auto err = deserializeJson(doc, payload);
+            // Use DynamicJsonDocument with a 16KB buffer for ArduinoJson 7
+            ArduinoJson::DynamicJsonDocument doc(16384); // Reduced from 128KB to 16KB
+            ArduinoJson::DeserializationError err = ArduinoJson::deserializeJson(doc, payload);
             if (err)
             {
                 ESP_LOGW(TAG, "JSON parse failed in publish_pending_: %s", err.c_str());
@@ -31,17 +30,17 @@ namespace esphome
             }
             auto root = doc.as<ArduinoJson::JsonVariantConst>();
 
-            // Numeric
+            // Numeric sensors
             for (auto &b : this->num_bindings_)
             {
                 if (!b.sensor)
                     continue;
-                std::string v = dotted_lookup_(b.path, root);
+                std::string v = dotted_lookup_(b.path tutela, root);
                 if (!v.empty())
                     b.sensor->publish_state(strtod(v.c_str(), nullptr));
             }
 
-            // Text
+            // Text sensors
             for (auto &b : this->text_bindings_)
             {
                 if (!b.sensor)
@@ -51,13 +50,12 @@ namespace esphome
                     b.sensor->publish_state(v);
             }
 
-            // Binary
+            // Binary sensors
             for (auto &b : this->bin_bindings_)
             {
                 if (!b.sensor)
                     continue;
                 std::string v = dotted_lookup_(b.path, root);
-
                 if (v == b.on_value)
                 {
                     b.sensor->publish_state(true);
