@@ -41,6 +41,7 @@ class NetgearM5Component : public Component {
   void publish_pending_();
 
   std::string host_;
+  std::string cookie_; 
   uint32_t poll_interval_ms_{30000};
 
   TaskHandle_t task_handle_{nullptr};
