@@ -366,6 +366,11 @@ namespace esphome
             }
             ESP_LOGD(TAG, "Raw JSON payload (%u bytes): %s", payload.size(), log_safe_payload.c_str());
 
+            // Trim whitespace from payload
+            payload.erase(0, payload.find_first_not_of(" \t\r\n"));
+            payload.erase(payload.find_last_not_of(" \t\r\n") + 1);
+            ESP_LOGD(TAG, "Trimmed JSON payload (%u bytes): %s", payload.size(), log_safe_payload.c_str());
+
             ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload);
@@ -399,6 +404,23 @@ namespace esphome
 
             // Use the entire document as root
             auto root = doc.as<ArduinoJson::JsonObjectConst>();
+
+            // Log all top-level keys for debugging
+            std::string keys;
+            for (JsonPairConst kv : root)
+            {
+                keys += kv.key().c_str();
+                keys += ", ";
+            }
+            if (!keys.empty())
+            {
+                keys.erase(keys.size() - 2); // Remove trailing ", "
+                ESP_LOGD(TAG, "Top-level JSON keys: %s", keys.c_str());
+            }
+            else
+            {
+                ESP_LOGW(TAG, "No top-level JSON keys found");
+            }
 
             // Numeric sensors
             for (auto &b : this->num_bindings_)
