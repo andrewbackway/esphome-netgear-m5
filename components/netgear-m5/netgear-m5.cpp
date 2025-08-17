@@ -11,6 +11,9 @@ static const char *const TAG = "netgear_m5";
 
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
+
+  return;
+  
   // Wait for network connectivity
   for (int i = 0; i < 30; i++) {
     struct addrinfo hints = {};
