@@ -145,11 +145,11 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
   size_t content_length = 0;
   auto cl_pos = headers.find("Content-Length:");
   if (cl_pos != std::string::npos) {
-    try {
+    //try {
       content_length = std::stoul(headers.substr(cl_pos + 15));
-    } catch (...) {
-      content_length = 0;
-    }
+    //} catch (...) {
+    //  content_length = 0;
+    //}
   }
 
   if (content_length > 0) {
