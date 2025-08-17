@@ -40,36 +40,28 @@ void NetgearM5Component::dump_config() {
 void NetgearM5Component::task_trampoline_(void *param) {
   static_cast<NetgearM5Component *>(param)->task_loop_();
 }
+
 void NetgearM5Component::task_loop_() {
   const TickType_t delay_ticks = pdMS_TO_TICKS(this->poll_interval_ms_);
   for (;;) {
     if (!network::is_connected()) {
       ESP_LOGW(TAG, "Network not connected, skipping fetch");
-      vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds before retrying
+      vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
     }
     
     std::string url = "http://" + this->host_ + "/api/model.json?internalapi=1";
     
-    // The `send` method is non-blocking. The code will continue immediately.
-    // The response is handled in the lambda function.
-    this->http_client_->send(
-        http_request::RequestOptions{
-            .method = http_request::Method::GET,
-            .url = url,
-            .timeout = 5000  // ms
-        },
-        [this](http_request::HttpRequestResponse r) {
-            if (r.status_code == 200 && r.body.has_value()) {
-                std::string body = *r.body;
-                
-                taskENTER_CRITICAL(&this->mux_);
-                this->last_payload_ = std::move(body);
-                this->has_new_payload_ = true;
-                taskEXIT_CRITICAL(&this->mux_);
-            } else {
-                ESP_LOGW(TAG, "HTTP request failed, code %d", r.status_code);
-            }
+    this->http_client_->make_request(
+        url,
+        esphome::http_request::HttpRequestMethod::HTTP_GET,
+        [this](const std::string &body) {
+            ESP_LOGD(TAG, "Received response body: %s", body.c_str());
+
+            taskENTER_CRITICAL(&this->mux_);
+            this->last_payload_ = body;
+            this->has_new_payload_ = true;
+            taskEXIT_CRITICAL(&this->mux_);
         });
 
     vTaskDelay(delay_ticks);
