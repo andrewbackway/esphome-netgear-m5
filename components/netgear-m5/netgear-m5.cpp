@@ -160,7 +160,7 @@ namespace esphome
                 }
                 lwip_close(sock);
 
-                // Log full response, escaping non-printable characters
+                /* Log full response, escaping non-printable characters
                 ESP_LOGD(TAG, "Full HTTP response (%u bytes):", rx.size());
                 std::string log_safe_rx = rx;
                 for (char &c : log_safe_rx)
@@ -178,6 +178,7 @@ namespace esphome
                     std::string chunk = log_safe_rx.substr(i, chunk_size);
                     ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
                 }
+                */
 
                 // Find header/body split
                 auto header_end = rx.find("\r\n\r\n");
@@ -188,7 +189,10 @@ namespace esphome
                 }
 
                 std::string headers = rx.substr(0, header_end);
-                std::string body_part = rx.substr(header_end + 4);
+                // here be demons !!!
+
+                auto header_end_2 = rx.find("\r\n");
+                std::string body_part = rx.substr(header_end_2, header_end + 4);
 
                 // Log HTTP status
                 auto status_end = headers.find("\r\n");
@@ -289,27 +293,33 @@ namespace esphome
                     //}
                 }
 
-                if (content_length > 0)
+                // Find start of JSON (first '{')
+                auto json_start = body_part.find('{');
+                if (json_start == std::string::npos)
                 {
-                    if (body_part.size() < content_length)
-                    {
-                        ESP_LOGW(TAG, "Body truncated: expected %u bytes, got %u bytes", (unsigned)content_length, (unsigned)body_part.size());
-                        return false;
-                    }
-                    else
-                    {
-                        body = body_part.substr(0, content_length);
-                    }
-                }
-                else
-                {
-                    body = body_part;
+                    ESP_LOGW(TAG, "No JSON object found in body");
+                    return false;
                 }
 
-                // Log body, escaping non-printable characters
-                ESP_LOGD(TAG, "Extracted HTTP body (%u bytes):", body.size());
-                std::string log_safe_body = body;
-                for (char &c : log_safe_body)
+                // Extract JSON from body_part
+                std::string cleaned_body = body_part.substr(json_start);
+
+                // Clean non-printable characters except \n, \r, \t
+                std::string final_body;
+                final_body.reserve(cleaned_body.size());
+                for (char c : cleaned_body)
+                {
+                    if (c >= 32 || c == '\n' || c == '\r' || c == '\t')
+                        final_body += c;
+                }
+                // Trim whitespace
+                final_body.erase(0, final_body.find_first_not_of(" \t\r\n"));
+                final_body.erase(final_body.find_last_not_of(" \t\r\n") + 1);
+
+                // Log cleaned body
+                ESP_LOGD(TAG, "Cleaned HTTP body (%u bytes):", final_body.size());
+                std::string log_safe_cleaned = final_body;
+                for (char &c : log_safe_cleaned)
                 {
                     if (c == '\r')
                         c = '\\';
@@ -318,13 +328,19 @@ namespace esphome
                     else if (c < 32 || c >= 127)
                         c = '?';
                 }
-                for (size_t i = 0; i < log_safe_body.size(); i += chunk_size)
+                for (size_t i = 0; i < log_safe_cleaned.size(); i += chunk_size)
                 {
-                    std::string chunk = log_safe_body.substr(i, chunk_size);
-                    ESP_LOGD(TAG, "Body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+                    std::string chunk = log_safe_cleaned.substr(i, chunk_size);
+                    ESP_LOGD(TAG, "Cleaned body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
                 }
 
-                return true;
+                if (content_length > 0 && final_body.size() < content_length)
+                {
+                    ESP_LOGW(TAG, "Cleaned body truncated: expected %u bytes, got %u bytes", (unsigned)content_length, (unsigned)final_body.size());
+                    return false;
+                }
+
+                body = final_body;
             }
 
             ESP_LOGW(TAG, "Max redirects (%d) reached", max_redirects);
