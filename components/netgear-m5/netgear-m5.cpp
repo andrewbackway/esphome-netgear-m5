@@ -184,7 +184,7 @@ namespace esphome
                 return;
             }
 
-            // Log full response
+            /*
             ESP_LOGD(TAG, "Full JSON Payload (%u bytes):", payload.size());
             std::string log_safe_rx = payload;
             for (char &c : log_safe_rx)
@@ -202,6 +202,7 @@ namespace esphome
                 std::string chunk = log_safe_rx.substr(i, chunk_size);
                 ESP_LOGD(TAG, "Response chunk %s", chunk.c_str());
             }
+            */
 
             ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
             JsonDocument doc;
@@ -300,13 +301,13 @@ namespace esphome
             // Log the root JSON for debugging
             std::string root_json;
             serializeJson(root, root_json);
-            ESP_LOGD(TAG, "Root JSON: %s", root_json.c_str());
+            //ESP_LOGD(TAG, "Root JSON: %s", root_json.c_str());
 
             while (i < path.size())
             {
                 size_t dot = path.find('.', i);
                 std::string token = path.substr(i, dot == std::string::npos ? std::string::npos : dot - i);
-                ESP_LOGD(TAG, "Processing token: %s", token.c_str());
+                //ESP_LOGD(TAG, "Processing token: %s", token.c_str());
 
                 size_t lb = token.find('[');
                 if (lb != std::string::npos && token.back() == ']')
