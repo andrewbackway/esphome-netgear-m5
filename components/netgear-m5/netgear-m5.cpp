@@ -76,6 +76,13 @@ namespace esphome
             {
                 this->logged_in_ = true;
 
+                return this->_request("http://" + this->host_ + "/",
+                        HTTP_METHOD_GET,
+                        "", // body (none for GET)
+                        "", // content type
+                        body) == ESP_OK;
+
+                /*
                 std::string login_page;
                 ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
                 esp_err_t get_err = this->_request_with_redirects(
@@ -132,6 +139,7 @@ namespace esphome
                     return false;
                 }
                 ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
+                */
             }
 
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
