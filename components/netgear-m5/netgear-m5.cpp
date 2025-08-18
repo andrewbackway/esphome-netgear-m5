@@ -77,6 +77,7 @@ namespace esphome
                 this->logged_in_ = true; 
                 
                 std::string login_page;
+                ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
                 esp_err_t get_err = this->_request(
                     "http://" + this->host_ + "/index.html",
                     HTTP_METHOD_GET,
@@ -147,6 +148,8 @@ namespace esphome
                                                const std::string &content_type,
                                                std::string &response)
         {
+            ESP_LOGD(TAG, "Performing HTTP request: %s", url.c_str());
+
             esp_http_client_config_t config = {};
             config.url = url.c_str();
             config.event_handler = _event_handler;
@@ -160,7 +163,9 @@ namespace esphome
                 return ESP_FAIL;
             }
 
+            ESP_LOGD(TAG, "Setting HTTP method: %d", method);
             esp_http_client_set_method(client, method);
+
 
             // Reattach stored cookies
             if (!cookies_.empty())
@@ -183,6 +188,8 @@ namespace esphome
                     esp_http_client_set_header(client, "Content-Type", content_type.c_str());
                 }
             }
+
+            ESP_LOGD(TAG, "Performing HTTP request: %s", url.c_str());
 
             esp_err_t err = esp_http_client_perform(client);
 
