@@ -233,11 +233,24 @@ namespace esphome
                 this->last_status_code_ = status_code;
                 ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
 
+                // --- NEW DEBUGGING CODE START ---
+                ESP_LOGD(TAG, "--- Start of Response Headers ---");
+                char *header_key = nullptr;
+                char *header_value = nullptr;
+                esp_err_t header_err = esp_http_client_get_first_header(client, &header_key, &header_value);
+                while (header_err == ESP_OK) {
+                    if (header_key && header_value) {
+                        ESP_LOGD(TAG, "Header: %s = %s", header_key, header_value);
+                    }
+                    header_err = esp_http_client_get_next_header(client, &header_key, &header_value);
+                }
+                ESP_LOGD(TAG, "--- End of Response Headers ---");
+                // --- NEW DEBUGGING CODE END ---
                 
 
                // Correct way to handle Location header to avoid dangling pointer
                 char *location_val = nullptr;
-                esp_err_t header_err = esp_http_client_get_header(client, "location", &location_val);
+                esp_err_t header_err = esp_http_client_get_header(client, "Location", &location_val);
                 if (header_err == ESP_OK ) {
                     if ( location_val) {
                         // Create a new std::string, making a copy of the C-style string
