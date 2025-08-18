@@ -160,14 +160,6 @@ namespace esphome
                 int status_code = this->last_status_code_; // capture inside _request
                 if (status_code >= 300 && status_code < 400)
                 {
-                    // Extract cookies from response headers
-                    char *cookie_val = nullptr;
-                    if (esp_http_client_get_header(client, "Set-Cookie", &cookie_val) == ESP_OK && cookie_val)
-                    {
-                        cookies_.push_back(std::string(cookie_val));
-                        ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
-                    }
-
                     const char *location = this->last_location_header_.c_str(); // extract inside _request
                     if (!location || i == max_redirects)
                     {
