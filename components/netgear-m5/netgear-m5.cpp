@@ -201,7 +201,7 @@ namespace esphome
             config.url = url.c_str();
             config.event_handler = _event_handler;
             config.user_data = &response;
-            config.disable_auto_redirect = false;
+            config.disable_auto_redirect = true;
 
             esp_http_client_handle_t client = esp_http_client_init(&config);
             if (client == nullptr)
@@ -246,23 +246,6 @@ namespace esphome
                 int status_code = esp_http_client_get_status_code(client);
                 this->last_status_code_ = status_code;
                 ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
-
-                // Extract Location header if present (for redirects)
-                char *location_val = nullptr;
-                esp_http_client_get_header(client, "Location", &location_val);
-
-                if (location_val != nullptr) {
-                    this->last_location_header_ = location_val;
-                    ESP_LOGD(TAG, "Redirect location: %s", this->last_location_header_.c_str());
-                } else {
-                    this->last_location_header_.clear();
-                    // Let's log if a 302 was received but the header was not found
-                    if (status_code == 302) {
-                        ESP_LOGD(TAG, "302 redirect received, but Location header not found.");
-                    } else {
-                        ESP_LOGD(TAG, "NO Redirect location.");
-                    }
-                }
                 
                 // Extract cookies from response headers
                 char *cookie_val = nullptr;
