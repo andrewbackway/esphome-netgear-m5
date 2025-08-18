@@ -75,14 +75,14 @@ namespace esphome
             if (!this->logged_in_)
              {
                 this->logged_in_ = true; 
-                /*
-                std::string form_page;
+                
+                std::string login_page;
                 esp_err_t get_err = this->_request(
-                    "http://" + this->host_ + "/",
+                    "http://" + this->host_ + "/index.html",
                     HTTP_METHOD_GET,
                     "",
                     "",
-                    form_page);
+                    login_page);
 
                 if (get_err != ESP_OK)
                 {
@@ -96,14 +96,14 @@ namespace esphome
                 // --- crude token extraction ---
                 std::string token;
                 const std::string marker = "id=\"login_token\"name=\"token\" value=\"";
-                size_t pos = form_page.find(marker);
+                size_t pos = login_page.find(marker);
                 if (pos != std::string::npos)
                 {
                     pos += marker.size();
-                    size_t end = form_page.find("\"", pos);
+                    size_t end = login_page.find("\"", pos);
                     if (end != std::string::npos)
                     {
-                        token = form_page.substr(pos, end - pos);
+                        token = login_page.substr(pos, end - pos);
                         ESP_LOGD(TAG, "Extracted token: %s", token.c_str());
                     }
                 }
