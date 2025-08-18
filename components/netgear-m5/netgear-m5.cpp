@@ -74,13 +74,6 @@ namespace esphome
             // Perform login if we don’t already have cookies
             if (!this->logged_in_)
             {
-                this->logged_in_ = true;
-
-                return this->_request("http://" + this->host_ + "/",
-                        HTTP_METHOD_GET,
-                        "", // body (none for GET)
-                        "", // content type
-                        body) == ESP_OK;
 
                 /*
                 std::string login_page;
@@ -121,7 +114,7 @@ namespace esphome
                     ESP_LOGE(TAG, "Failed to extract login token");
                     return false;
                 }
-
+                */
                 std::string login_response;
                 std::string login_body = "session.password=" + this->password_ + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
                 // std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
@@ -138,8 +131,10 @@ namespace esphome
                     ESP_LOGE(TAG, "Login failed");
                     return false;
                 }
+                
+                this->logged_in_ = true;
+
                 ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
-                */
             }
 
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
@@ -195,7 +190,7 @@ namespace esphome
             config.url = url.c_str();
             config.event_handler = _event_handler;
             config.user_data = &response;
-            config.disable_auto_redirect = false;
+            config.disable_auto_redirect = true;
 
             esp_http_client_handle_t client = esp_http_client_init(&config);
             if (client == nullptr)
