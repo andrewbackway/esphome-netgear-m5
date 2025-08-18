@@ -79,7 +79,7 @@ namespace esphome
                 std::string login_page;
                 ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
                 esp_err_t get_err = this->_request(
-                    "http://" + this->host_ + "/index.html",
+                    "http://" + this->host_ + "/",
                     HTTP_METHOD_GET,
                     "",
                     "",
