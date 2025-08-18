@@ -56,17 +56,13 @@ namespace esphome
                     vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds before retrying
                     continue;
                 }
-                std::string raw;
-                if (this->fetch_once_(raw))
+                std::string body;
+                if (this->fetch_once_(body))
                 {
-                    std::string body;
-                    if (extract_http_body_(raw, body))
-                    {
-                        taskENTER_CRITICAL(&this->mux_);
-                        this->last_payload_ = std::move(body);
-                        this->has_new_payload_ = true;
-                        taskEXIT_CRITICAL(&this->mux_);
-                    }
+                    taskENTER_CRITICAL(&this->mux_);
+                    this->last_payload_ = std::move(body);
+                    this->has_new_payload_ = true;
+                    taskEXIT_CRITICAL(&this->mux_);
                 }
                 vTaskDelay(delay_ticks);
             }
@@ -97,7 +93,7 @@ namespace esphome
                 int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
                 if (err != 0 || res == nullptr)
                 {
-                    ESP_LOGW(TAG, "DNS resolution failed for %s", this->host_.c_str());
+                    ESP_LOGW(TAG, "DNS resolution failed for %s: %s", this->host_.c_str(), gai_strerror(err));
                     if (res)
                         freeaddrinfo(res);
                     return false;
@@ -108,7 +104,10 @@ namespace esphome
                 {
                     sock = lwip_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
                     if (sock < 0)
+                    {
+                        ESP_LOGW(TAG, "Failed to create socket: %d", errno);
                         continue;
+                    }
 
                     struct timeval tv{.tv_sec = 10, .tv_usec = 0};
                     lwip_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
@@ -116,6 +115,7 @@ namespace esphome
 
                     if (lwip_connect(sock, p->ai_addr, p->ai_addrlen) == 0)
                         break;
+                    ESP_LOGW(TAG, "Failed to connect to %s:%s: %d", this->host_.c_str(), port, errno);
                     lwip_close(sock);
                     sock = -1;
                 }
@@ -135,9 +135,11 @@ namespace esphome
                 if (!this->cookie_.empty())
                 {
                     req += "Cookie: " + this->cookie_ + "\r\n";
+                    ESP_LOGD(TAG, "Sending Cookie: %s", this->cookie_.c_str());
                 }
                 req += "\r\n";
 
+                ESP_LOGD(TAG, "Sending request: %s", req.c_str());
                 if (lwip_send(sock, req.data(), req.size(), 0) < 0)
                 {
                     ESP_LOGW(TAG, "Failed to send request: %d", errno);
@@ -160,6 +162,25 @@ namespace esphome
                 }
                 lwip_close(sock);
 
+                // Log full response
+                ESP_LOGD(TAG, "Full HTTP response (%u bytes):", rx.size());
+                std::string log_safe_rx = rx;
+                for (char &c : log_safe_rx)
+                {
+                    if (c == '\r')
+                        c = '\\';
+                    else if (c == '\n')
+                        c = 'n';
+                    else if (c < 32 || c >= 127)
+                        c = '?';
+                }
+                const size_t chunk_size = 64;
+                for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
+                {
+                    std::string chunk = log_safe_rx.substr(i, chunk_size);
+                    ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+                }
+
                 // Find header/body split
                 auto header_end = rx.find("\r\n\r\n");
                 if (header_end == std::string::npos)
@@ -169,7 +190,6 @@ namespace esphome
                 }
 
                 std::string headers = rx.substr(0, header_end);
-                // here be demons !!!
                 std::string body_part = rx.substr(header_end + 4);
 
                 // Log HTTP status
@@ -178,6 +198,28 @@ namespace esphome
                 {
                     std::string status_line = headers.substr(0, status_end);
                     ESP_LOGD(TAG, "HTTP status: %s", status_line.c_str());
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "No HTTP status line found");
+                }
+
+                // Log Content-Type
+                auto ct_pos = headers.find("Content-Type:");
+                if (ct_pos != std::string::npos)
+                {
+                    size_t start = ct_pos + 13;
+                    size_t end = headers.find("\r\n", start);
+                    if (end == std::string::npos)
+                        end = headers.size();
+                    std::string content_type = headers.substr(start, end - start);
+                    content_type.erase(0, content_type.find_first_not_of(" \t"));
+                    content_type.erase(content_type.find_last_not_of(" \t") + 1);
+                    ESP_LOGD(TAG, "Content-Type: %s", content_type.c_str());
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "No Content-Type header found");
                 }
 
                 // Check for Set-Cookie header
@@ -243,26 +285,26 @@ namespace esphome
                 auto cl_pos = headers.find("Content-Length:");
                 if (cl_pos != std::string::npos)
                 {
-                    // try
-                    //{
                     content_length = std::stoul(headers.substr(cl_pos + 15));
-                    //}
-                    // catch (...)
-                    //{
-                    //    content_length = 0;
-                    //}
+                    ESP_LOGD(TAG, "Content-Length: %u bytes", content_length);
                 }
 
-                // Find start of JSON (first '{')
+                // Find start and end of JSON
                 auto json_start = body_part.find('{');
                 if (json_start == std::string::npos)
                 {
-                    ESP_LOGW(TAG, "No JSON object found in body");
+                    ESP_LOGW(TAG, "No JSON object start found in body");
+                    return false;
+                }
+                auto json_end = body_part.rfind('}');
+                if (json_end == std::string::npos || json_end < json_start)
+                {
+                    ESP_LOGW(TAG, "No JSON object end found in body");
                     return false;
                 }
 
-                // Extract JSON from body_part
-                std::string cleaned_body = body_part.substr(json_start);
+                // Extract JSON
+                std::string cleaned_body = body_part.substr(json_start, json_end - json_start + 1);
 
                 // Clean non-printable characters except \n, \r, \t
                 std::string final_body;
@@ -276,27 +318,45 @@ namespace esphome
                 final_body.erase(0, final_body.find_first_not_of(" \t\r\n"));
                 final_body.erase(final_body.find_last_not_of(" \t\r\n") + 1);
 
+                // Log cleaned body
+                ESP_LOGD(TAG, "Cleaned HTTP body (%u bytes):", final_body.size());
+                std::string log_safe_cleaned = final_body;
+                for (char &c : log_safe_cleaned)
+                {
+                    if (c == '\r')
+                        c = '\\';
+                    else if (c == '\n')
+                        c = 'n';
+                    else if (c < 32 || c >= 127)
+                        c = '?';
+                }
+                for (size_t i = 0; i < log_safe_cleaned.size(); i += chunk_size)
+                {
+                    std::string chunk = log_safe_cleaned.substr(i, chunk_size);
+                    ESP_LOGD(TAG, "Cleaned body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+                }
+
+                // Validate JSON structure
+                JsonDocument test_doc;
+                DeserializationError test_err = deserializeJson(test_doc, final_body);
+                if (test_err || !test_doc.is<JsonObject>())
+                {
+                    ESP_LOGW(TAG, "Invalid JSON structure: %s", test_err.c_str());
+                    return false;
+                }
+
                 if (content_length > 0 && final_body.size() < content_length)
                 {
                     ESP_LOGW(TAG, "Cleaned body truncated: expected %u bytes, got %u bytes", (unsigned)content_length, (unsigned)final_body.size());
                     return false;
                 }
 
-                body = final_body;
+                body = std::move(final_body);
                 return true;
             }
 
             ESP_LOGW(TAG, "Max redirects (%d) reached", max_redirects);
             return false;
-        }
-
-        bool NetgearM5Component::extract_http_body_(const std::string &raw, std::string &body_out)
-        {
-            auto pos = raw.find("\r\n\r\n");
-            if (pos == std::string::npos)
-                return false;
-            body_out.assign(raw.begin() + pos + 4, raw.end());
-            return true;
         }
 
         void NetgearM5Component::publish_pending_()
@@ -312,6 +372,19 @@ namespace esphome
                 return;
             }
 
+            // Log the raw payload for debugging
+            std::string log_safe_payload = payload;
+            for (char &c : log_safe_payload)
+            {
+                if (c == '\r')
+                    c = '\\';
+                else if (c == '\n')
+                    c = 'n';
+                else if (c < 32 || c >= 127)
+                    c = '?';
+            }
+            ESP_LOGD(TAG, "Raw JSON payload (%u bytes): %s", payload.size(), log_safe_payload.c_str());
+
             ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload);
@@ -322,30 +395,24 @@ namespace esphome
             }
             ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
 
-            // Log full response
-            ESP_LOGD(TAG, "Full JSON Payload (%u bytes):", payload.size());
-            std::string log_safe_rx = payload;
-            for (char &c : log_safe_rx)
+            // Log the entire parsed JSON
+            std::string parsed_json;
+            serializeJson(doc, parsed_json);
+            for (char &c : parsed_json)
             {
                 if (c == '\r')
                     c = ' ';
                 else if (c == '\n')
                     c = ' ';
                 else if (c < 32 || c >= 127)
-                    c = ' ';
+                    c = '?';
             }
-            const size_t chunk_size = 64;
-            for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
-            {
-                std::string chunk = log_safe_rx.substr(i, chunk_size);
-                ESP_LOGD(TAG, "Response chunk %s", chunk.c_str());
-            }
-
+            ESP_LOGD(TAG, "Parsed JSON (%u bytes): %s", parsed_json.size(), parsed_json.c_str());
 
             // Check if doc is an object
             if (!doc.is<JsonObject>())
             {
-                ESP_LOGW(TAG, "Parsed JSON is not an object");
+                ESP_LOGW(TAG, "Parsed JSON is not an object: %s", parsed_json.c_str());
                 return;
             }
 
