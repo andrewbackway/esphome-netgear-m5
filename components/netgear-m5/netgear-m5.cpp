@@ -70,7 +70,11 @@ namespace esphome
 
         bool NetgearM5Component::fetch_once_(std::string &body)
         {
-            return this->_request(this->host_, HTTP_METHOD_GET, "/api/model.json?internalapi=1", body) == ESP_OK;
+            return this->_request(this->host_ + "/api/model.json?internalapi=1",
+                                  HTTP_METHOD_GET,
+                                  "", // body (none for GET)
+                                  "", // content type
+                                  body) == ESP_OK;
         }
 
         esp_err_t NetgearM5Component::_request(const std::string &url,
@@ -124,11 +128,11 @@ namespace esphome
                 ESP_LOGD(TAG, "HTTP Status = %d", status_code);
 
                 // Extract cookies from response headers
-                char cookie_buf[256];
-                if (esp_http_client_get_header(client, "Set-Cookie", cookie_buf, sizeof(cookie_buf)) == ESP_OK)
+                char *cookie_val = nullptr;
+                if (esp_http_client_get_header(client, "Set-Cookie", &cookie_val) == ESP_OK && cookie_val)
                 {
-                    cookies_.push_back(std::string(cookie_buf));
-                    ESP_LOGD(TAG, "Stored cookie: %s", cookie_buf);
+                    cookies_.push_back(std::string(cookie_val));
+                    ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
                 }
             }
             else
