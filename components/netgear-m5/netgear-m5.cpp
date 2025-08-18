@@ -276,11 +276,27 @@ namespace esphome
                 final_body.erase(0, final_body.find_first_not_of(" \t\r\n"));
                 final_body.erase(final_body.find_last_not_of(" \t\r\n") + 1);
 
-                if (content_length > 0 && final_body.size() < content_length)
+
+
+                ESP_LOGD(TAG, "FINAL BODY SIZE  (%u bytes):", final_body.size());
+                std::string log_safe_rx = final_body;
+                for (char &c : log_safe_rx)
                 {
-                    ESP_LOGW(TAG, "Cleaned body truncated: expected %u bytes, got %u bytes", (unsigned)content_length, (unsigned)final_body.size());
-                    return false;
+                    if (c == '\r')
+                        c = ' ';
+                    else if (c == '\n')
+                        c = ' ';
+                    else if (c < 32 || c >= 127)
+                        c = ' ';
                 }
+                const size_t chunk_size = 64;
+                for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
+                {
+                    std::string chunk = log_safe_rx.substr(i, chunk_size);
+                    ESP_LOGD(TAG, "FINAL BODY chunk %s", chunk.c_str());
+                }
+
+
 
                 body = final_body;
                 return true;
@@ -312,17 +328,7 @@ namespace esphome
                 return;
             }
 
-            ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
-            JsonDocument doc;
-            DeserializationError err = deserializeJson(doc, payload);
-            if (err)
-            {
-                ESP_LOGW(TAG, "JSON parse failed in publish_pending_: %s (payload size: %u bytes)", err.c_str(), payload.size());
-                return;
-            }
-            ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
-
-            // Log full response
+             // Log full response
             ESP_LOGD(TAG, "Full JSON Payload (%u bytes):", payload.size());
             std::string log_safe_rx = payload;
             for (char &c : log_safe_rx)
@@ -342,6 +348,18 @@ namespace esphome
             }
 
 
+
+            ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, payload);
+            if (err)
+            {
+                ESP_LOGW(TAG, "JSON parse failed in publish_pending_: %s (payload size: %u bytes)", err.c_str(), payload.size());
+                return;
+            }
+            ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
+
+           
             // Check if doc is an object
             if (!doc.is<JsonObject>())
             {
