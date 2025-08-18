@@ -178,7 +178,7 @@ namespace esphome
                 for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
                 {
                     std::string chunk = log_safe_rx.substr(i, chunk_size);
-                    ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+                    ESP_LOGD(TAG, "Response chunk: %s", chunk.c_str());
                 }
 
                 // Find header/body split
