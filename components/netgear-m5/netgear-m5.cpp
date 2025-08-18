@@ -70,7 +70,7 @@ namespace esphome
 
         bool NetgearM5Component::fetch_once_(std::string &body)
         {
-
+            ESP_LOGD(TAG, "Fetching data from Netgear M5");
             // Perform login if we don’t already have cookies
             if (!this->logged_in_)
              {
@@ -87,6 +87,9 @@ namespace esphome
                     ESP_LOGE(TAG, "Failed to load login form");
                     return false;
                 }
+
+                ESP_LOGD(TAG, "Extracting login token");
+
 
                 // --- crude token extraction ---
                 std::string token;
