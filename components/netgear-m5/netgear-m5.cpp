@@ -147,10 +147,23 @@ namespace esphome
                     return false;
                 }
 
-                // Read response
-                char buf[1024];
+             har buf[1024];
                 std::string rx;
                 rx.reserve(8192);
+
+                // Check for chunked encoding (must be set before loop based on headers)
+                bool is_chunked = false; // Assume headers checked earlier
+                std::string headers; // Assume headers populated earlier
+                if (headers.find("Transfer-Encoding: chunked") != std::string::npos)
+                {
+                    is_chunked = true;
+                    ESP_LOGD(TAG, "Chunked encoding detected");
+                }
+
+                // Read response, handling chunked encoding
+                std::string chunk_buffer;
+                size_t chunk_size = 0;
+                bool reading_chunk_size = true;
 
                 while (true)
                 {
@@ -158,11 +171,45 @@ namespace esphome
                     if (n <= 0)
                         break;
                     buf[n] = '\0';
-                    rx.append(buf, n);
+                    chunk_buffer.append(buf, n);
+
+                    if (is_chunked)
+                    {
+                        while (!chunk_buffer.empty())
+                        {
+                            if (reading_chunk_size)
+                            {
+                                // Find chunk size
+                                auto crlf = chunk_buffer.find("\r\n");
+                                if (crlf == std::string::npos)
+                                    continue; // Wait for more data
+                                std::string size_str = chunk_buffer.substr(0, crlf);
+                                    chunk_size = std::stoul(size_str, nullptr, 16);
+                                chunk_buffer.erase(0, crlf + 2); // Remove size and \r\n
+                                if (chunk_size == 0)
+                                    break; // End of chunks
+                                reading_chunk_size = false;
+                            }
+                            else
+                            {
+                                // Read chunk data
+                                if (chunk_buffer.size() < chunk_size + 2) // Need chunk data + \r\n
+                                    continue; // Wait for more data
+                                rx.append(chunk_buffer, 0, chunk_size);
+                                chunk_buffer.erase(0, chunk_size + 2); // Remove chunk data and \r\n
+                                reading_chunk_size = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        rx.append(chunk_buffer);
+                        chunk_buffer.clear();
+                    }
                 }
                 lwip_close(sock);
 
-                // Log full response
+                /* Confirmed working
                 ESP_LOGD(TAG, "Full HTTP response (%u bytes):", rx.size());
                 std::string log_safe_rx = rx;
                 for (char &c : log_safe_rx)
@@ -180,7 +227,8 @@ namespace esphome
                     std::string chunk = log_safe_rx.substr(i, chunk_size);
                     ESP_LOGD(TAG, "Response chunk: %s", chunk.c_str());
                 }
-
+                */
+               
                 // Find header/body split
                 auto header_end = rx.find("\r\n\r\n");
                 if (header_end == std::string::npos)
@@ -202,12 +250,12 @@ namespace esphome
                     else if (c == '\n')
                         c = ' ';
                     else if (c < 32 || c >= 127)
-                        c = '?';
+                        c = ' ';
                 }
                 for (size_t i = 0; i < log_safe_body.size(); i += chunk_size)
                 {
                     std::string chunk = log_safe_body.substr(i, chunk_size);
-                    ESP_LOGD(TAG, "Raw body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+                    ESP_LOGD(TAG, "Raw body chunk: %s", chunk.c_str());
                 }
 
                 // Log HTTP status
