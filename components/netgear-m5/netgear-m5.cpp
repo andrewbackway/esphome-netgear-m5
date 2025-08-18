@@ -151,15 +151,6 @@ namespace esphome
                 std::string rx;
                 rx.reserve(8192);
 
-                // Check for chunked encoding (must be set before loop based on headers)
-                bool is_chunked = false; // Assume headers checked earlier
-                std::string headers; // Assume headers populated earlier
-                if (headers.find("Transfer-Encoding: chunked") != std::string::npos)
-                {
-                    is_chunked = true;
-                    ESP_LOGD(TAG, "Chunked encoding detected");
-                }
-
                 // Read response, handling chunked encoding
                 std::string chunk_buffer;
                 size_t chunk_size = 0;
@@ -173,8 +164,6 @@ namespace esphome
                     buf[n] = '\0';
                     chunk_buffer.append(buf, n);
 
-                    if (is_chunked)
-                    {
                         while (!chunk_buffer.empty())
                         {
                             if (reading_chunk_size)
@@ -200,12 +189,7 @@ namespace esphome
                                 reading_chunk_size = true;
                             }
                         }
-                    }
-                    else
-                    {
-                        rx.append(chunk_buffer);
-                        chunk_buffer.clear();
-                    }
+                   
                 }
                 lwip_close(sock);
 
