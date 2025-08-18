@@ -319,7 +319,7 @@ namespace esphome
                 // Handle chunked encoding
                 std::string cleaned_body;
                 
-                    cleaned_body = body_part;
+                    cleaned_body = body_part; 
 
                 /*
                 // Find start and end of JSON
