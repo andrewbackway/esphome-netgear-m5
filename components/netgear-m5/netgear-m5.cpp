@@ -314,41 +314,12 @@ namespace esphome
 
                 // Check for chunked encoding
                 //bool is_chunked = headers.find("Transfer-Encoding: chunked") != std::string::npos;
-                ESP_LOGD(TAG, "Chunked encoding: %s", is_chunked ? "yes" : "no");
+                //ESP_LOGD(TAG, "Chunked encoding: %s", is_chunked ? "yes" : "no");
 
                 // Handle chunked encoding
                 std::string cleaned_body;
-                if (is_chunked)
-                {
-                    size_t pos = 0;
-                    while (pos < body_part.size())
-                    {
-                        // Find chunk size
-                        auto crlf = body_part.find("\r\n", pos);
-                        if (crlf == std::string::npos)
-                        {
-                            ESP_LOGW(TAG, "Invalid chunked encoding: no chunk size found");
-                            return false;
-                        }
-                        std::string size_str = body_part.substr(pos, crlf - pos);
-                        size_t chunk_size;
-                        chunk_size = std::stoul(size_str, nullptr, 16);
-                        if (chunk_size == 0)
-                            break; // End of chunks
-                        pos = crlf + 2; // Skip \r\n
-                        if (pos + chunk_size > body_part.size())
-                        {
-                            ESP_LOGW(TAG, "Chunk size %u exceeds body length", chunk_size);
-                            return false;
-                        }
-                        cleaned_body += body_part.substr(pos, chunk_size);
-                        pos += chunk_size + 2; // Skip chunk data and trailing \r\n
-                    }
-                }
-                else
-                {
+                
                     cleaned_body = body_part;
-                }
 
                 // Find start and end of JSON
                 auto json_start = cleaned_body.find('{');
