@@ -73,12 +73,12 @@ namespace esphome
             ESP_LOGD(TAG, "Fetching data from Netgear M5");
             // Perform login if we don’t already have cookies
             if (!this->logged_in_)
-             {
-                this->logged_in_ = true; 
-                
+            {
+                this->logged_in_ = true;
+
                 std::string login_page;
                 ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
-                esp_err_t get_err = this->_request(
+                esp_err_t get_err = this->_request_with_redirects(
                     "http://" + this->host_ + "/",
                     HTTP_METHOD_GET,
                     "",
@@ -92,7 +92,6 @@ namespace esphome
                 }
 
                 ESP_LOGD(TAG, "Extracting login token");
-
 
                 // --- crude token extraction ---
                 std::string token;
@@ -117,7 +116,7 @@ namespace esphome
 
                 std::string login_response;
                 std::string login_body = "session.password=" + this->password_ + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
-                //std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+                // std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
 
                 esp_err_t login_err = this->_request(
                     "http://" + this->host_ + "/Forms/config",
@@ -132,7 +131,6 @@ namespace esphome
                     return false;
                 }
                 ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
-
             }
 
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
@@ -140,6 +138,48 @@ namespace esphome
                                   "", // body (none for GET)
                                   "", // content type
                                   body) == ESP_OK;
+        }
+
+        esp_err_t NetgearM5Component::_request_with_redirects(
+            const std::string &url,
+            esp_http_client_method_t method,
+            const std::string &body,
+            const std::string &content_type,
+            std::string &response,
+            int max_redirects)
+        {
+            std::string current_url = url;
+            for (int i = 0; i <= max_redirects; i++)
+            {
+                esp_err_t err = this->_request(current_url, method, body, content_type, response);
+                if (err != ESP_OK)
+                    return err;
+
+                int status_code = this->last_status_code_; // capture inside _request
+                if (status_code >= 300 && status_code < 400)
+                {
+                    // Extract cookies from response headers
+                    char *cookie_val = nullptr;
+                    if (esp_http_client_get_header(client, "Set-Cookie", &cookie_val) == ESP_OK && cookie_val)
+                    {
+                        cookies_.push_back(std::string(cookie_val));
+                        ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
+                    }
+                    
+                    const char *location = this->last_location_header_.c_str(); // extract inside _request
+                    if (!location || i == max_redirects)
+                    {
+                        ESP_LOGW(TAG, "Max redirects reached or no Location header");
+                        return ESP_FAIL;
+                    }
+                    ESP_LOGI(TAG, "Following redirect to %s", location);
+                    current_url = location;
+                    continue; // retry loop
+                }
+
+                return err; // success or non-redirect status
+            }
+            return ESP_FAIL;
         }
 
         esp_err_t NetgearM5Component::_request(const std::string &url,
@@ -165,7 +205,6 @@ namespace esphome
 
             ESP_LOGD(TAG, "Setting HTTP method: %d", method);
             esp_http_client_set_method(client, method);
-
 
             // Reattach stored cookies
             if (!cookies_.empty())
