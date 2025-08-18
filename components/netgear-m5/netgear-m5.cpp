@@ -329,7 +329,7 @@ namespace esphome
                 }
 
                 // Check for chunked encoding
-                bool is_chunked = headers.find("Transfer-Encoding: chunked") != std::string::npos;
+                //bool is_chunked = headers.find("Transfer-Encoding: chunked") != std::string::npos;
                 ESP_LOGD(TAG, "Chunked encoding: %s", is_chunked ? "yes" : "no");
 
                 // Handle chunked encoding
