@@ -56,17 +56,13 @@ namespace esphome
                     vTaskDelay(pdMS_TO_TICKS(5000)); // Wait 5 seconds before retrying
                     continue;
                 }
-                std::string raw;
-                if (this->fetch_once_(raw))
+                std::string body;
+                if (this->fetch_once_(body))
                 {
-                    std::string body;
-                    if (extract_http_body_(raw, body))
-                    {
-                        taskENTER_CRITICAL(&this->mux_);
-                        this->last_payload_ = std::move(body);
-                        this->has_new_payload_ = true;
-                        taskEXIT_CRITICAL(&this->mux_);
-                    }
+                    taskENTER_CRITICAL(&this->mux_);
+                    this->last_payload_ = std::move(body);
+                    this->has_new_payload_ = true;
+                    taskEXIT_CRITICAL(&this->mux_);
                 }
                 vTaskDelay(delay_ticks);
             }
@@ -296,23 +292,12 @@ namespace esphome
                     ESP_LOGD(TAG, "FINAL BODY chunk %s", chunk.c_str());
                 }
 
-
-
                 body = final_body;
                 return true;
             }
 
             ESP_LOGW(TAG, "Max redirects (%d) reached", max_redirects);
             return false;
-        }
-
-        bool NetgearM5Component::extract_http_body_(const std::string &raw, std::string &body_out)
-        {
-            auto pos = raw.find("\r\n\r\n");
-            if (pos == std::string::npos)
-                return false;
-            body_out.assign(raw.begin() + pos + 4, raw.end());
-            return true;
         }
 
         void NetgearM5Component::publish_pending_()
