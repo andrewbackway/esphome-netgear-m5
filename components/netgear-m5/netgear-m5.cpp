@@ -70,7 +70,7 @@ namespace esphome
 
         bool NetgearM5Component::fetch_once_(std::string &body)
         {
-            return this->_request(this->host_ + "/api/model.json?internalapi=1",
+            return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
                                   HTTP_METHOD_GET,
                                   "", // body (none for GET)
                                   "", // content type
