@@ -147,7 +147,7 @@ namespace esphome
                     return false;
                 }
 
-             har buf[1024];
+                char buf[1024];
                 std::string rx;
                 rx.reserve(8192);
 
