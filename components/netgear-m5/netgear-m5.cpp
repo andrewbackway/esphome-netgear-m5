@@ -283,6 +283,7 @@ namespace esphome
                 }
 
                 body = final_body;
+                return true;
             }
 
             ESP_LOGW(TAG, "Max redirects (%d) reached", max_redirects);
