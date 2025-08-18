@@ -328,11 +328,11 @@ namespace esphome
             for (char &c : log_safe_rx)
             {
                 if (c == '\r')
-                    c = '';
+                    c = ' ';
                 else if (c == '\n')
-                    c = '';
+                    c = ' ';
                 else if (c < 32 || c >= 127)
-                    c = '';
+                    c = ' ';
             }
             const size_t chunk_size = 64;
             for (size_t i = 0; i < payload.size(); i += chunk_size)
