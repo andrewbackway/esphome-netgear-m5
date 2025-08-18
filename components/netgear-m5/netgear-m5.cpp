@@ -170,7 +170,7 @@ namespace esphome
 
                 std::string headers = rx.substr(0, header_end);
                 // here be demons !!!
-                std::string body_part = rx.substr(header_end_2 + 4);
+                std::string body_part = rx.substr(header_end + 4);
 
                 // Log HTTP status
                 auto status_end = headers.find("\r\n");
