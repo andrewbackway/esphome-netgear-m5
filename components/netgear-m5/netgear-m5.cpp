@@ -180,24 +180,6 @@ namespace esphome
                     ESP_LOGD(TAG, "HTTP status: %s", status_line.c_str());
                 }
 
-                // Log Content-Type to verify JSON
-                auto ct_pos = headers.find("Content-Type:");
-                if (ct_pos != std::string::npos)
-                {
-                    size_t start = ct_pos + 13;
-                    size_t end = headers.find("\r\n", start);
-                    if (end == std::string::npos)
-                        end = headers.size();
-                    std::string content_type = headers.substr(start, end - start);
-                    content_type.erase(0, content_type.find_first_not_of(" \t"));
-                    content_type.erase(content_type.find_last_not_of(" \t") + 1);
-                    ESP_LOGD(TAG, "Content-Type: %s", content_type.c_str());
-                }
-                else
-                {
-                    ESP_LOGW(TAG, "No Content-Type header found");
-                }
-
                 // Check for Set-Cookie header
                 auto cookie_pos = headers.find("Set-Cookie:");
                 if (cookie_pos != std::string::npos)
