@@ -196,7 +196,7 @@ namespace esphome
                                                const std::string &content_type,
                                                std::string &response)
         {
-            ESP_LOGD(TAG, "HTTP request: %s", url.c_str());
+            ESP_LOGD(TAG, "HTTP request:  %s", url.c_str());
 
             esp_http_client_config_t config = {};
             config.url = url.c_str();
