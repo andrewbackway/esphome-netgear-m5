@@ -22,13 +22,14 @@ CONF_PATH = "path"
 CONF_ON_VALUE = "on_value"
 CONF_OFF_VALUE = "off_value"
 
-SENSOR_SCHEMA = sensor.sensor_schema().extend({cv.Required(CONF_PATH): cv.string})
-TEXT_SENSOR_SCHEMA = text_sensor.text_sensor_schema().extend({cv.Required(CONF_PATH): cv.string})
+SENSOR_SCHEMA = sensor.sensor_schema().extend(
+    {cv.Required(CONF_PATH): cv.string})
+TEXT_SENSOR_SCHEMA = text_sensor.text_sensor_schema().extend(
+    {cv.Required(CONF_PATH): cv.string})
 
 BINARY_SENSOR_SCHEMA = binary_sensor.binary_sensor_schema().extend(
     {
         cv.Required(CONF_PATH): cv.string,
-        cv.Required(CONF_PASSWORD): cv.string,
         cv.Optional(CONF_ON_VALUE, default="true"): cv.string,
         cv.Optional(CONF_OFF_VALUE, default="false"): cv.string,
     }
