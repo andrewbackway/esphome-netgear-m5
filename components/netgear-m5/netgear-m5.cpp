@@ -93,7 +93,7 @@ namespace esphome
                 int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
                 if (err != 0 || res == nullptr)
                 {
-                    ESP_LOGW(TAG, "DNS resolution failed for %s", this->host_.c_str());
+                    ESP_LOGW(TAG, "DNS resolution failed for %s: %s", this->host_.c_str(), gai_strerror(err));
                     if (res)
                         freeaddrinfo(res);
                     return false;
