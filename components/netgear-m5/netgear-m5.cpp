@@ -324,7 +324,7 @@ namespace esphome
             // Check if doc is an object
             if (!doc.is<JsonObject>())
             {
-                ESP_LOGW(TAG, "Parsed JSON is not an object: %s", parsed_json.c_str());
+                ESP_LOGW(TAG, "Parsed JSON is not an object");
                 return;
             }
 
