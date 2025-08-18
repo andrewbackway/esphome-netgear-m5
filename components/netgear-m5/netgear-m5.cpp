@@ -165,7 +165,7 @@ namespace esphome
                         cookies_.push_back(std::string(cookie_val));
                         ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
                     }
-                    
+
                     const char *location = this->last_location_header_.c_str(); // extract inside _request
                     if (!location || i == max_redirects)
                     {
