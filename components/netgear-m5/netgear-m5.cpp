@@ -311,24 +311,6 @@ namespace esphome
                 return;
             }
 
-            // Log the raw payload for debugging
-            std::string log_safe_payload = payload;
-            for (char &c : log_safe_payload)
-            {
-                if (c == '\r')
-                    c = '\\';
-                else if (c == '\n')
-                    c = 'n';
-                else if (c < 32 || c >= 127)
-                    c = '?';
-            }
-            ESP_LOGD(TAG, "Raw JSON payload (%u bytes): %s", payload.size(), log_safe_payload.c_str());
-
-            // Trim whitespace from payload
-            payload.erase(0, payload.find_first_not_of(" \t\r\n"));
-            payload.erase(payload.find_last_not_of(" \t\r\n") + 1);
-            ESP_LOGD(TAG, "Trimmed JSON payload (%u bytes): %s", payload.size(), log_safe_payload.c_str());
-
             ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload);
@@ -338,20 +320,6 @@ namespace esphome
                 return;
             }
             ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
-
-            // Log the entire parsed JSON
-            std::string parsed_json;
-            serializeJson(doc, parsed_json);
-            for (char &c : parsed_json)
-            {
-                if (c == '\r')
-                    c = '\\';
-                else if (c == '\n')
-                    c = 'n';
-                else if (c < 32 || c >= 127)
-                    c = '?';
-            }
-            ESP_LOGD(TAG, "Parsed JSON (%u bytes): %s", parsed_json.size(), parsed_json.c_str());
 
             // Check if doc is an object
             if (!doc.is<JsonObject>())
