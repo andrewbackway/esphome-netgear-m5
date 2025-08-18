@@ -6,14 +6,14 @@
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 
+#include "http_client_component.h"
+
 #include <string>
 #include <vector>
 
 extern "C" {
   #include <freertos/FreeRTOS.h>
   #include <freertos/task.h>
-  #include <lwip/sockets.h>
-  #include <lwip/netdb.h>
 }
 
 namespace esphome {
