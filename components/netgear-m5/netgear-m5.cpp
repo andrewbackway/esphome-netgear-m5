@@ -148,7 +148,7 @@ namespace esphome
                                                const std::string &content_type,
                                                std::string &response)
         {
-            ESP_LOGD(TAG, "Performing HTTP request: %s", url.c_str());
+            ESP_LOGD(TAG, "HTTP request: %s", url.c_str());
 
             esp_http_client_config_t config = {};
             config.url = url.c_str();
@@ -192,6 +192,8 @@ namespace esphome
             ESP_LOGD(TAG, "Performing HTTP request: %s", url.c_str());
 
             esp_err_t err = esp_http_client_perform(client);
+
+            ESP_LOGD(TAG, "Performed HTTP request: %s", url.c_str());
 
             if (err == ESP_OK)
             {
