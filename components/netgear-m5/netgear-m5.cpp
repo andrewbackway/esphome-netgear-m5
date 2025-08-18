@@ -74,6 +74,8 @@ namespace esphome
             // Perform login if we don’t already have cookies
             if (!this->logged_in_)
              {
+                this->logged_in_ = true; 
+                
                 std::string form_page;
                 esp_err_t get_err = this->_request(
                     "http://" + this->host_ + "/",
@@ -129,7 +131,6 @@ namespace esphome
                 }
                 ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
 
-                this->logged_in_ = true; 
             }
 
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
