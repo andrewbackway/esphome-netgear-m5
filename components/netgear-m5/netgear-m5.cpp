@@ -335,9 +335,9 @@ namespace esphome
                     c = ' ';
             }
             const size_t chunk_size = 64;
-            for (size_t i = 0; i < payload.size(); i += chunk_size)
+            for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
             {
-                std::string chunk = payload.substr(i, chunk_size);
+                std::string chunk = log_safe_rx.substr(i, chunk_size);
                 ESP_LOGD(TAG, "Response chunk %s", chunk.c_str());
             }
 
