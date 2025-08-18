@@ -322,6 +322,26 @@ namespace esphome
             }
             ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
 
+            // Log full response
+            ESP_LOGD(TAG, "Full JSON Payload (%u bytes):", payload.size());
+            std::string log_safe_rx = payload;
+            for (char &c : log_safe_rx)
+            {
+                if (c == '\r')
+                    c = '';
+                else if (c == '\n')
+                    c = '';
+                else if (c < 32 || c >= 127)
+                    c = '';
+            }
+            const size_t chunk_size = 64;
+            for (size_t i = 0; i < payload.size(); i += chunk_size)
+            {
+                std::string chunk = payload.substr(i, chunk_size);
+                ESP_LOGD(TAG, "Response chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
+            }
+
+
             // Check if doc is an object
             if (!doc.is<JsonObject>())
             {
