@@ -71,7 +71,7 @@ namespace esphome
         bool NetgearM5Component::fetch_once_(std::string &body)
         {
             ESP_LOGD(TAG, "Fetching data from Netgear M5");
-            // Perform login if we don’t already have cookies
+            /* Perform login if we don’t already have cookies
             if (!this->logged_in_)
             {
                 // first request to get session cookie assigned
@@ -126,6 +126,7 @@ namespace esphome
                     return false;
                 }
                 */
+               /*
                 std::string login_response;
                 std::string login_body = "session.password=" + this->password_ + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
                 // std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
@@ -147,7 +148,7 @@ namespace esphome
 
                 ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
             }
-
+*/
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
                                   HTTP_METHOD_GET,
                                   "", // body (none for GET)
@@ -201,7 +202,7 @@ namespace esphome
             config.url = url.c_str();
             config.event_handler = _event_handler;
             config.user_data = &response;
-            config.disable_auto_redirect = true;
+            config.disable_auto_redirect = false;
 
             esp_http_client_handle_t client = esp_http_client_init(&config);
             if (client == nullptr)
