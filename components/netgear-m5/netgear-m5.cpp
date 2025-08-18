@@ -321,6 +321,7 @@ namespace esphome
                 
                     cleaned_body = body_part;
 
+                /*
                 // Find start and end of JSON
                 auto json_start = cleaned_body.find('{');
                 if (json_start == std::string::npos)
@@ -337,6 +338,7 @@ namespace esphome
 
                 // Extract JSON
                 cleaned_body = cleaned_body.substr(json_start, json_end - json_start + 1);
+*/
 
                 // Clean non-printable characters except \n, \r, \t
                 std::string final_body;
