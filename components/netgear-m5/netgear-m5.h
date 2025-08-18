@@ -32,6 +32,10 @@ class NetgearM5Component : public Component {
   void bind_text_sensor(const std::string &json_path, text_sensor::TextSensor *s);
   void bind_binary_sensor(const std::string &json_path, binary_sensor::BinarySensor *s,
                           const std::string &on_value, const std::string &off_value);
+
+  // Access cookie jar
+  const std::vector<std::string> &cookies() const { return cookies_; }
+
  protected:
   static void task_trampoline_(void *param);
   void task_loop_();
@@ -39,6 +43,14 @@ class NetgearM5Component : public Component {
   static bool extract_http_body_(const std::string &raw, std::string &body_out);
   static std::string dotted_lookup_(const std::string &path, const ::ArduinoJson::JsonVariantConst &root);
   void publish_pending_();
+
+  esp_err_t _request(const std::string &url,
+                     esp_http_client_method_t method,
+                     const std::string &body,
+                     const std::string &content_type,
+                     std::string &response);
+
+  static esp_err_t _event_handler(esp_http_client_event_t *evt);
 
   std::string host_;
   std::string cookie_; 

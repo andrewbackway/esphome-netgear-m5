@@ -67,9 +67,96 @@ namespace esphome
                 vTaskDelay(delay_ticks);
             }
         }
-        
-        bool NetgearM5Component::fetch_once_(std::string &body) {
-            
+
+        bool NetgearM5Component::fetch_once_(std::string &body)
+        {
+            return this->_request(this->host_, HTTP_METHOD_GET, "/api/model.json?internalapi=1", body) == ESP_OK;
+        }
+
+        esp_err_t NetgearM5Component::_request(const std::string &url,
+                                               esp_http_client_method_t method,
+                                               const std::string &body,
+                                               const std::string &content_type,
+                                               std::string &response)
+        {
+            esp_http_client_config_t config = {};
+            config.url = url.c_str();
+            config.event_handler = _event_handler;
+            config.user_data = &response;
+            config.disable_auto_redirect = false; // enable redirects
+
+            esp_http_client_handle_t client = esp_http_client_init(&config);
+            if (client == nullptr)
+            {
+                ESP_LOGE(TAG, "Failed to init HTTP client");
+                return ESP_FAIL;
+            }
+
+            esp_http_client_set_method(client, method);
+
+            // Reattach stored cookies
+            if (!cookies_.empty())
+            {
+                std::string cookie_header;
+                for (const auto &c : cookies_)
+                {
+                    if (!cookie_header.empty())
+                        cookie_header += "; ";
+                    cookie_header += c;
+                }
+                esp_http_client_set_header(client, "Cookie", cookie_header.c_str());
+            }
+
+            if (!body.empty())
+            {
+                esp_http_client_set_post_field(client, body.c_str(), body.size());
+                if (!content_type.empty())
+                {
+                    esp_http_client_set_header(client, "Content-Type", content_type.c_str());
+                }
+            }
+
+            esp_err_t err = esp_http_client_perform(client);
+
+            if (err == ESP_OK)
+            {
+                int status_code = esp_http_client_get_status_code(client);
+                ESP_LOGD(TAG, "HTTP Status = %d", status_code);
+
+                // Extract cookies from response headers
+                char cookie_buf[256];
+                if (esp_http_client_get_header(client, "Set-Cookie", cookie_buf, sizeof(cookie_buf)) == ESP_OK)
+                {
+                    cookies_.push_back(std::string(cookie_buf));
+                    ESP_LOGD(TAG, "Stored cookie: %s", cookie_buf);
+                }
+            }
+            else
+            {
+                ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+            }
+
+            esp_http_client_cleanup(client);
+            return err;
+        }
+
+        esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt)
+        {
+            switch (evt->event_id)
+            {
+            case HTTP_EVENT_ON_DATA:
+            {
+                if (evt->user_data && evt->data_len > 0)
+                {
+                    auto *resp = static_cast<std::string *>(evt->user_data);
+                    resp->append((const char *)evt->data, evt->data_len);
+                }
+                break;
+            }
+            default:
+                break;
+            }
+            return ESP_OK;
         }
 
         void NetgearM5Component::publish_pending_()
@@ -85,7 +172,7 @@ namespace esphome
                 return;
             }
 
-             // Log full response
+            // Log full response
             ESP_LOGD(TAG, "Full JSON Payload (%u bytes):", payload.size());
             std::string log_safe_rx = payload;
             for (char &c : log_safe_rx)
@@ -104,8 +191,6 @@ namespace esphome
                 ESP_LOGD(TAG, "Response chunk %s", chunk.c_str());
             }
 
-
-
             ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload);
@@ -116,7 +201,6 @@ namespace esphome
             }
             ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
 
-           
             // Check if doc is an object
             if (!doc.is<JsonObject>())
             {
