@@ -188,7 +188,7 @@ namespace esphome
             config.url = url.c_str();
             config.event_handler = _event_handler;
             config.user_data = &response;
-            config.disable_auto_redirect = false; // enable redirects
+            config.disable_auto_redirect = true;
 
             esp_http_client_handle_t client = esp_http_client_init(&config);
             if (client == nullptr)
