@@ -156,6 +156,7 @@ namespace esphome
                 if (err != ESP_OK)
                     return err;
 
+
                 int status_code = this->last_status_code_; // capture inside _request
                 if (status_code >= 300 && status_code < 400)
                 {
@@ -238,6 +239,18 @@ namespace esphome
             if (err == ESP_OK)
             {
                 int status_code = esp_http_client_get_status_code(client);
+                this->last_status_code_ = status_code;
+                ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
+
+                // Extract Location header if present (for redirects)
+                char *location_val = nullptr;
+                if (esp_http_client_get_header(client, "Location", &location_val) == ESP_OK && location_val) {
+                    this->last_location_header_ = location_val;
+                    ESP_LOGD(TAG, "Redirect location: %s", location_val);
+                } else {
+                    this->last_location_header_.clear();
+                }
+                
                 ESP_LOGD(TAG, "HTTP Status = %d", status_code);
 
                 // Extract cookies from response headers
