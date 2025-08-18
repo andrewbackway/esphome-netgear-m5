@@ -276,25 +276,6 @@ namespace esphome
                 final_body.erase(0, final_body.find_first_not_of(" \t\r\n"));
                 final_body.erase(final_body.find_last_not_of(" \t\r\n") + 1);
 
-                // Log cleaned body
-                ESP_LOGD(TAG, "Cleaned HTTP body (%u bytes):", final_body.size());
-                std::string log_safe_cleaned = final_body;
-                for (char &c : log_safe_cleaned)
-                {
-                    if (c == '\r')
-                        c = '\\';
-                    else if (c == '\n')
-                        c = 'n';
-                    else if (c < 32 || c >= 127)
-                        c = '?';
-                }
-                const size_t chunk_size = 64;
-                for (size_t i = 0; i < log_safe_cleaned.size(); i += chunk_size)
-                {
-                    std::string chunk = log_safe_cleaned.substr(i, chunk_size);
-                    ESP_LOGD(TAG, "Cleaned body chunk [%u-%u]: %s", i, i + chunk.size() - 1, chunk.c_str());
-                }
-
                 if (content_length > 0 && final_body.size() < content_length)
                 {
                     ESP_LOGW(TAG, "Cleaned body truncated: expected %u bytes, got %u bytes", (unsigned)content_length, (unsigned)final_body.size());
