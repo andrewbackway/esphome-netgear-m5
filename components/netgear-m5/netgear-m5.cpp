@@ -233,39 +233,24 @@ namespace esphome
                 this->last_status_code_ = status_code;
                 ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
 
-                // Log all headers for debugging
-                char *header_key = nullptr;
-                char *header_value = nullptr;
-                esp_http_client_fetch_headers(client); // Ensure headers are fetched
-                int header_count = esp_http_client_get_headers(client, &header_key, &header_value);
-                ESP_LOGD(TAG, "Received %d headers:", header_count);
-                for (int i = 0; i < header_count; i++)
-                {
-                    esp_http_client_get_header(client, header_key, &header_value);
-                    ESP_LOGD(TAG, "Header %s: %s", header_key, header_value ? header_value : "(null)");
-                    // Check for Location header case-insensitively
-                    if (header_key && strcasecmp(header_key, "Location") == 0 && header_value)
-                    {
-                        this->last_location_header_ = header_value;
-                        ESP_LOGD(TAG, "Found Location header: %s", header_value);
-                    }
-                    header_key = nullptr; // Reset for next iteration
-                    header_value = nullptr;
-                }
+                
 
-                // Extract Location header if present (for redirects)
+               // Correct way to handle Location header to avoid dangling pointer
                 char *location_val = nullptr;
-                if (esp_http_client_get_header(client, "Location", &location_val) == ESP_OK && location_val)
-                {
-                    this->last_location_header_ = location_val;
-                    ESP_LOGD(TAG, "Redirect location: %s", location_val);
-                }
-                else
-                {
+                if (esp_http_client_get_header(client, "Location", &location_val) == ESP_OK && location_val) {
+                    // Create a new std::string, making a copy of the C-style string
+                    this->last_location_header_ = std::string(location_val);
+                    ESP_LOGD(TAG, "Redirect location: %s", this->last_location_header_.c_str());
+                } else {
                     ESP_LOGD(TAG, "NO Redirect location");
                     this->last_location_header_.clear();
                 }
 
+        
+                
+                ESP_LOGD(TAG, "HTTP Status = %d", status_code);
+
+                
                 // Extract cookies from response headers
                 char *cookie_val = nullptr;
                 if (esp_http_client_get_header(client, "Set-Cookie", &cookie_val) == ESP_OK && cookie_val)
