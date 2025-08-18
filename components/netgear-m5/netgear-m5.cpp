@@ -233,38 +233,18 @@ namespace esphome
                 this->last_status_code_ = status_code;
                 ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
 
-                // --- NEW DEBUGGING CODE START ---
-                ESP_LOGD(TAG, "--- Start of Response Headers ---");
-                char *header_key = nullptr;
-                char *header_value = nullptr;
-                esp_err_t header_err = esp_http_client_get_first_header(client, &header_key, &header_value);
-                while (header_err == ESP_OK) {
-                    if (header_key && header_value) {
-                        ESP_LOGD(TAG, "Header: %s = %s", header_key, header_value);
-                    }
-                    header_err = esp_http_client_get_next_header(client, &header_key, &header_value);
-                }
-                ESP_LOGD(TAG, "--- End of Response Headers ---");
-                // --- NEW DEBUGGING CODE END ---
-                
-
-               // Correct way to handle Location header to avoid dangling pointer
+            
+                 // Extract Location header if present (for redirects)
                 char *location_val = nullptr;
-                esp_err_t header_err = esp_http_client_get_header(client, "Location", &location_val);
-                if (header_err == ESP_OK ) {
-                    if ( location_val) {
-                        // Create a new std::string, making a copy of the C-style string
-                        this->last_location_header_ = std::string(location_val);
-                        ESP_LOGD(TAG, "Redirect location: %s", this->last_location_header_.c_str());
-                    } else {
-                        ESP_LOGD(TAG, "NO Redirect location");
-                        this->last_location_header_.clear();
-                    }
-                } else {
-                    ESP_LOGE(TAG, "Failed to get Location header: %d", header_err);
-                }
+                esp_err_t get_header_err = esp_http_client_get_header(client, "Location", &location_val);
 
-        
+                if (get_header_err == ESP_OK && location_val) {
+                    this->last_location_header_ = location_val;
+                    ESP_LOGD(TAG, "Redirect location: %s", this->last_location_header_.c_str());
+                } else {
+                    this->last_location_header_.clear();
+                    ESP_LOGD(TAG, "NO Redirect location. Get header error code: %d", get_header_err);
+                }
                 
                 ESP_LOGD(TAG, "HTTP Status = %d", status_code);
 
