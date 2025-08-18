@@ -83,7 +83,8 @@ namespace esphome
                     HTTP_METHOD_GET,
                     "",
                     "",
-                    login_page);
+                    login_page,
+                    5);
 
                 if (get_err != ESP_OK)
                 {
