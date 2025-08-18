@@ -52,6 +52,14 @@ class NetgearM5Component : public Component {
                      const std::string &body,
                      const std::string &content_type,
                      std::string &response);
+  esp_err_t NetgearM5Component::_request_with_redirects(
+    const std::string &url,
+    esp_http_client_method_t method,
+    const std::string &body,
+    const std::string &content_type,
+    std::string &response,
+    int max_redirects)
+{
 
   static esp_err_t _event_handler(esp_http_client_event_t *evt);
 
