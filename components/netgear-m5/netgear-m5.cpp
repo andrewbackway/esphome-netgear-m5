@@ -156,7 +156,6 @@ namespace esphome
                 if (err != ESP_OK)
                     return err;
 
-
                 int status_code = this->last_status_code_; // capture inside _request
                 if (status_code >= 300 && status_code < 400)
                 {
@@ -240,6 +239,7 @@ namespace esphome
                     this->last_location_header_ = location_val;
                     ESP_LOGD(TAG, "Redirect location: %s", location_val);
                 } else {
+                    ESP_LOGD(TAG, "NO Redirect location");
                     this->last_location_header_.clear();
                 }
                 
