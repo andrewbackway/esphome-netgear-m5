@@ -79,7 +79,7 @@ namespace esphome
                                   HTTP_METHOD_GET,
                                   "", // body (none for GET)
                                   "", // content type
-                                  body) 
+                                  body);
                 if (first_err != ESP_OK)
                 {
                     ESP_LOGE(TAG, "Unable to obtain first cookie");
