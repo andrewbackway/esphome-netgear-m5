@@ -237,13 +237,18 @@ namespace esphome
 
                // Correct way to handle Location header to avoid dangling pointer
                 char *location_val = nullptr;
-                if (esp_http_client_get_header(client, "Location", &location_val) == ESP_OK && location_val) {
-                    // Create a new std::string, making a copy of the C-style string
-                    this->last_location_header_ = std::string(location_val);
-                    ESP_LOGD(TAG, "Redirect location: %s", this->last_location_header_.c_str());
+                esp_err_t header_err = esp_http_client_get_header(client, "Location", &location_val);
+                if (header_err == ESP_OK )
+                    if ( location_val) {
+                        // Create a new std::string, making a copy of the C-style string
+                        this->last_location_header_ = std::string(location_val);
+                        ESP_LOGD(TAG, "Redirect location: %s", this->last_location_header_.c_str());
+                    } else {
+                        ESP_LOGD(TAG, "NO Redirect location");
+                        this->last_location_header_.clear();
+                    }
                 } else {
-                    ESP_LOGD(TAG, "NO Redirect location");
-                    this->last_location_header_.clear();
+                    ESP_LOGE(TAG, "Failed to get Location header: %d", header_err);
                 }
 
         
