@@ -148,6 +148,14 @@ namespace esphome
         {
             switch (evt->event_id)
             {
+            case HTTP_EVENT_ON_CONNECTED:
+                // new request/redirect chain step
+                if (evt->user_data)
+                {
+                    auto *resp = static_cast<std::string *>(evt->user_data);
+                    resp->clear();
+                }
+                break;
             case HTTP_EVENT_ON_DATA:
             {
                 if (evt->user_data && evt->data_len > 0)
