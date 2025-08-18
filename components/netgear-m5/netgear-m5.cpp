@@ -74,12 +74,23 @@ namespace esphome
             // Perform login if we don’t already have cookies
             if (!this->logged_in_)
             {
+                // first request to get session cookie assigned
+                esp_err_t first_err = this->_request("http://" + this->host_ + "/index.html",
+                                  HTTP_METHOD_GET,
+                                  "", // body (none for GET)
+                                  "", // content type
+                                  body) 
+                if (first_err != ESP_OK)
+                {
+                    ESP_LOGE(TAG, "Unable to obtain first cookie");
+                    return false;
+                }
 
                 /*
                 std::string login_page;
                 ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
                 esp_err_t get_err = this->_request_with_redirects(
-                    "http://" + this->host_ + "/",
+                    "http://" + this->host_ + "/index.html",
                     HTTP_METHOD_GET,
                     "",
                     "",
