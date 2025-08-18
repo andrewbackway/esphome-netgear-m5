@@ -38,6 +38,7 @@ class NetgearM5Component : public Component {
   const std::vector<std::string> &cookies() const { return cookies_; }
 
  protected:
+  bool logged_in_ = false;
   static void task_trampoline_(void *param);
   void task_loop_();
   bool fetch_once_(std::string &body);

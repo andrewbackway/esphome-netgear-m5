@@ -70,11 +70,47 @@ namespace esphome
 
         bool NetgearM5Component::fetch_once_(std::string &body)
         {
-            // Step 1: Perform login if we don’t already have cookies
-            if (this->cookies_.empty())
-            {
+
+            // Perform login if we don’t already have cookies
+            if (!this->logged_in_)
+             {
+                std::string form_page;
+                esp_err_t get_err = this->_request(
+                    "http://" + this->host_ + "/",
+                    HTTP_METHOD_GET,
+                    "",
+                    "",
+                    form_page);
+
+                if (get_err != ESP_OK)
+                {
+                    ESP_LOGE(TAG, "Failed to load login form");
+                    return false;
+                }
+
+                // --- crude token extraction ---
+                std::string token;
+                const std::string marker = "id=\"login_token\"name=\"token\" value=\"";
+                size_t pos = form_page.find(marker);
+                if (pos != std::string::npos)
+                {
+                    pos += marker.size();
+                    size_t end = form_page.find("\"", pos);
+                    if (end != std::string::npos)
+                    {
+                        token = form_page.substr(pos, end - pos);
+                        ESP_LOGD(TAG, "Extracted token: %s", token.c_str());
+                    }
+                }
+
+                if (token.empty())
+                {
+                    ESP_LOGE(TAG, "Failed to extract login token");
+                    return false;
+                }
+
                 std::string login_response;
-                std::string login_body = "session.password=" + this->password_ + "&ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+                std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
 
                 esp_err_t login_err = this->_request(
                     "http://" + this->host_ + "/Forms/config",
@@ -89,6 +125,8 @@ namespace esphome
                     return false;
                 }
                 ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
+
+                this->logged_in_ = true; 
             }
 
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
