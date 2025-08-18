@@ -75,7 +75,7 @@ namespace esphome
             if (!this->logged_in_)
              {
                 this->logged_in_ = true; 
-                
+                /*
                 std::string form_page;
                 esp_err_t get_err = this->_request(
                     "http://" + this->host_ + "/",
@@ -113,9 +113,10 @@ namespace esphome
                     ESP_LOGE(TAG, "Failed to extract login token");
                     return false;
                 }
-
+*/
                 std::string login_response;
-                std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+                std::string login_body = "session.password=" + this->password_ + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+                //std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
 
                 esp_err_t login_err = this->_request(
                     "http://" + this->host_ + "/Forms/config",
