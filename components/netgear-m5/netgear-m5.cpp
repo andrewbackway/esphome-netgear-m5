@@ -93,7 +93,7 @@ namespace esphome
                 int err = getaddrinfo(this->host_.c_str(), port, &hints, &res);
                 if (err != 0 || res == nullptr)
                 {
-                    ESP_LOGW(TAG, "DNS resolution failed for %s: %s", this->host_.c_str(), gai_strerror(err));
+                    ESP_LOGW(TAG, "DNS resolution failed for %s", this->host_.c_str());
                     if (res)
                         freeaddrinfo(res);
                     return false;
@@ -300,15 +300,7 @@ namespace esphome
                         }
                         std::string size_str = body_part.substr(pos, crlf - pos);
                         size_t chunk_size;
-                        try
-                        {
-                            chunk_size = std::stoul(size_str, nullptr, 16);
-                        }
-                        catch (...)
-                        {
-                            ESP_LOGW(TAG, "Invalid chunk size: %s", size_str.c_str());
-                            return false;
-                        }
+                        chunk_size = std::stoul(size_str, nullptr, 16);
                         if (chunk_size == 0)
                             break; // End of chunks
                         pos = crlf + 2; // Skip \r\n
@@ -356,8 +348,8 @@ namespace esphome
                 final_body.erase(final_body.find_last_not_of(" \t\r\n") + 1);
 
                 // Fix trailing commas in arrays and objects
-                std::regex trailing_comma_regex(R"(,\s*[\]\}])");
-                final_body = std::regex_replace(final_body, trailing_comma_regex, "]");
+                //std::regex trailing_comma_regex(R"(,\s*[\]\}])");
+                //final_body = std::regex_replace(final_body, trailing_comma_regex, "]");
 
                 // Log cleaned body
                 ESP_LOGD(TAG, "Cleaned HTTP body (%u bytes):", final_body.size());
