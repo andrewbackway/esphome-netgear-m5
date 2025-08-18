@@ -233,21 +233,22 @@ namespace esphome
                 this->last_status_code_ = status_code;
                 ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
 
-            
-                 // Extract Location header if present (for redirects)
+                // Extract Location header if present (for redirects)
                 char *location_val = nullptr;
-                esp_err_t get_header_err = esp_http_client_get_header(client, "Location", &location_val);
+                esp_http_client_get_header(client, "Location", &location_val);
 
-                if (get_header_err == ESP_OK && location_val) {
+                if (location_val != nullptr) {
                     this->last_location_header_ = location_val;
                     ESP_LOGD(TAG, "Redirect location: %s", this->last_location_header_.c_str());
                 } else {
                     this->last_location_header_.clear();
-                    ESP_LOGD(TAG, "NO Redirect location. Get header error code: %d", get_header_err);
+                    // Let's log if a 302 was received but the header was not found
+                    if (status_code == 302) {
+                        ESP_LOGD(TAG, "302 redirect received, but Location header not found.");
+                    } else {
+                        ESP_LOGD(TAG, "NO Redirect location.");
+                    }
                 }
-                
-                ESP_LOGD(TAG, "HTTP Status = %d", status_code);
-
                 
                 // Extract cookies from response headers
                 char *cookie_val = nullptr;
