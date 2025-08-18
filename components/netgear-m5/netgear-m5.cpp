@@ -70,6 +70,27 @@ namespace esphome
 
         bool NetgearM5Component::fetch_once_(std::string &body)
         {
+            // Step 1: Perform login if we don’t already have cookies
+            if (this->cookies_.empty())
+            {
+                std::string login_response;
+                std::string login_body = "session.password=" + this->password_;
+
+                esp_err_t login_err = this->_request(
+                    "http://" + this->host_ + "/Forms/config",
+                    HTTP_METHOD_POST,
+                    login_body,
+                    "application/x-www-form-urlencoded",
+                    login_response);
+
+                if (login_err != ESP_OK)
+                {
+                    ESP_LOGE(TAG, "Login failed");
+                    return false;
+                }
+                ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
+            }
+
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
                                   HTTP_METHOD_GET,
                                   "", // body (none for GET)
@@ -184,26 +205,6 @@ namespace esphome
                 return;
             }
 
-            /*
-            ESP_LOGD(TAG, "Full JSON Payload (%u bytes):", payload.size());
-            std::string log_safe_rx = payload;
-            for (char &c : log_safe_rx)
-            {
-                if (c == '\r')
-                    c = ' ';
-                else if (c == '\n')
-                    c = ' ';
-                else if (c < 32 || c >= 127)
-                    c = ' ';
-            }
-            const size_t chunk_size = 64;
-            for (size_t i = 0; i < log_safe_rx.size(); i += chunk_size)
-            {
-                std::string chunk = log_safe_rx.substr(i, chunk_size);
-                ESP_LOGD(TAG, "Response chunk %s", chunk.c_str());
-            }
-            */
-
             ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload);
@@ -301,13 +302,13 @@ namespace esphome
             // Log the root JSON for debugging
             std::string root_json;
             serializeJson(root, root_json);
-            //ESP_LOGD(TAG, "Root JSON: %s", root_json.c_str());
+            // ESP_LOGD(TAG, "Root JSON: %s", root_json.c_str());
 
             while (i < path.size())
             {
                 size_t dot = path.find('.', i);
                 std::string token = path.substr(i, dot == std::string::npos ? std::string::npos : dot - i);
-                //ESP_LOGD(TAG, "Processing token: %s", token.c_str());
+                // ESP_LOGD(TAG, "Processing token: %s", token.c_str());
 
                 size_t lb = token.find('[');
                 if (lb != std::string::npos && token.back() == ']')

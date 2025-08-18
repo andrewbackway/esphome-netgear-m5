@@ -22,6 +22,7 @@ namespace netgear_m5 {
 class NetgearM5Component : public Component {
  public:
   void set_host(const std::string &host) { host_ = host; }
+  void set_password(const std::string &password) { password_ = password; }
   void set_poll_interval(uint32_t ms) { poll_interval_ms_ = ms; }
 
   void setup() override;
@@ -54,7 +55,8 @@ class NetgearM5Component : public Component {
   static esp_err_t _event_handler(esp_http_client_event_t *evt);
 
   std::string host_;
-  std::string cookie_; 
+  std::string password_;
+  std::string cookie_;
   uint32_t poll_interval_ms_{30000};
 
   TaskHandle_t task_handle_{nullptr};
