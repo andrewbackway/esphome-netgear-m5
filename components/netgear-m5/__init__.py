@@ -13,6 +13,7 @@ netgear_m5_ns = cg.esphome_ns.namespace("netgear_m5")
 NetgearM5Component = netgear_m5_ns.class_("NetgearM5Component", cg.Component)
 
 CONF_HOST = "host"
+CONF_PASSWORD = "password"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_SENSORS = "sensors"
 CONF_TEXT_SENSORS = "text_sensors"
@@ -27,6 +28,7 @@ TEXT_SENSOR_SCHEMA = text_sensor.text_sensor_schema().extend({cv.Required(CONF_P
 BINARY_SENSOR_SCHEMA = binary_sensor.binary_sensor_schema().extend(
     {
         cv.Required(CONF_PATH): cv.string,
+        cv.Required(CONF_PASSWORD): cv.string,
         cv.Optional(CONF_ON_VALUE, default="true"): cv.string,
         cv.Optional(CONF_OFF_VALUE, default="false"): cv.string,
     }
@@ -36,6 +38,7 @@ CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(NetgearM5Component),
         cv.Required(CONF_HOST): cv.string,
+        cv.Required(CONF_PASSWORD): cv.string,
         cv.Optional(CONF_POLL_INTERVAL, default="30s"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_SENSORS, default=[]): cv.ensure_list(SENSOR_SCHEMA),
         cv.Optional(CONF_TEXT_SENSORS, default=[]): cv.ensure_list(TEXT_SENSOR_SCHEMA),
@@ -48,6 +51,7 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     cg.add(var.set_host(config[CONF_HOST]))
+    cg.add(var.set_password(config[CONF_PASSWORD]))
     cg.add(var.set_poll_interval(config[CONF_POLL_INTERVAL]))
 
     for s_conf in config[CONF_SENSORS]:
