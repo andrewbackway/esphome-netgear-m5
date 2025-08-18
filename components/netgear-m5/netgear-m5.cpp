@@ -113,7 +113,7 @@ namespace esphome
                     ESP_LOGE(TAG, "Failed to extract login token");
                     return false;
                 }
-*/
+
                 std::string login_response;
                 std::string login_body = "session.password=" + this->password_ + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
                 //std::string login_body = "session.password=" + this->password_ + "&token=" + token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
