@@ -44,6 +44,7 @@ class NetgearM5Component : public Component {
   static std::string dotted_lookup_(const std::string &path, const ::ArduinoJson::JsonVariantConst &root);
   void publish_pending_();
 
+  std::vector<std::string> cookies_;  // stores cookies between request
   esp_err_t _request(const std::string &url,
                      esp_http_client_method_t method,
                      const std::string &body,
