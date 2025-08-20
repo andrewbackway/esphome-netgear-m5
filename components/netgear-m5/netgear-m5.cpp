@@ -202,7 +202,6 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
     return ESP_FAIL;
   }
 
-  ESP_LOGD(TAG, "Setting HTTP method: %d", method);
   esp_http_client_set_method(client, method);
 
   // Reattach stored cookies
@@ -265,12 +264,20 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       break;
     case HTTP_EVENT_ON_HEADER:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
+      if (evt->header_key && evt->header_value) {
+        ESP_LOGD(TAG, "Header: %s: %s", evt->header_key, evt->header_value);
+
+        // Store headers in a map or vector if you want later access
+        self->last_headers_[evt->header_key] = evt->header_value;
+      }
+      break;
       break;
     case HTTP_EVENT_ON_CONNECTED:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
       // new request/redirect chain step
       if (evt->user_data) {
         resp->clear();  // start fresh on new request
+        self->last_headers_.clear();
       }
       break;
     case HTTP_EVENT_ON_DATA:
@@ -304,7 +311,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       break;
     }
     default:
-        ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
+      ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
       break;
   }
   return ESP_OK;
