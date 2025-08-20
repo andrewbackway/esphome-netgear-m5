@@ -169,6 +169,9 @@ namespace esphome
             int max_redirects)
         {
             std::string current_url = url;
+
+            ESP_LOGI(TAG, "Starting HTTP request with redirects: %s", current_url.c_str());
+            
             for (int i = 0; i <= max_redirects; i++)
             {
                 esp_err_t err = this->_request(current_url, method, body, content_type, response);
