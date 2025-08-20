@@ -270,11 +270,11 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
 }
 
 void NetgearM5Component::publish_pending_() {
-  std::string payload;
-  taskENTER_CRITICAL(&this->mux_);
-  payload.swap(this->last_payload_);
+  std::string payload = this->last_payload_;
+  //taskENTER_CRITICAL(&this->mux_);
+  //payload.swap(this->last_payload_);
   this->has_new_payload_ = false;
-  taskEXIT_CRITICAL(&this->mux_);
+  //taskEXIT_CRITICAL(&this->mux_);
   if (payload.empty()) {
     ESP_LOGD(TAG, "No payload to process");
     return;
