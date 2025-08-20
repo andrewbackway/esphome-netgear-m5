@@ -77,8 +77,7 @@ namespace esphome
                                   HTTP_METHOD_GET,
                                   "", // body (none for GET)
                                   "", // content type
-                                  body,
-                                  1);
+                                  body);
                                   
                 if (first_err != ESP_OK || cookies_.empty())
                 {
