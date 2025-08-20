@@ -171,7 +171,7 @@ namespace esphome
             std::string current_url = url;
 
             ESP_LOGI(TAG, "Starting HTTP request with redirects: %s", current_url.c_str());
-            
+
             for (int i = 0; i <= max_redirects; i++)
             {
                 esp_err_t err = this->_request(current_url, method, body, content_type, response);
@@ -285,14 +285,37 @@ namespace esphome
                 }
                 break;
             case HTTP_EVENT_ON_DATA:
-            {
                 if (evt->user_data && evt->data_len > 0)
                 {
                     auto *resp = static_cast<std::string *>(evt->user_data);
                     resp->append((const char *)evt->data, evt->data_len);
                 }
                 break;
-            }
+            case HTTP_EVENT_REDIRECT:
+                ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
+
+                 // Extract cookies from response headers
+                char *cookie_val = nullptr;
+                if (esp_http_client_get_header(evt->client, "Set-Cookie", &cookie_val) == ESP_OK && cookie_val)
+                {
+                    cookies_.push_back(std::string(cookie_val));
+                    ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
+                }
+
+                if (!cookies_.empty())
+                {
+                    std::string cookie_header;
+                    for (const auto &c : cookies_)
+                    {
+                        if (!cookie_header.empty())
+                            cookie_header += "; ";
+                        cookie_header += c;
+                    }
+                    esp_http_client_set_header(evt->client, "Cookie", cookie_header.c_str());
+                }
+
+                esp_http_client_set_redirection(evt->client);
+                break;  
             default:
                 break;
             }
