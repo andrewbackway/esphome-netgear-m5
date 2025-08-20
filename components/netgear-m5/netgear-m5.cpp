@@ -71,19 +71,6 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
   }
 
   if (!this->logged_in_) {
-    std::string login_page;
-    ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
-    esp_err_t get_err = this->_request("http://" + this->host_ + "/index.html",
-                        HTTP_METHOD_GET, 
-                        "", 
-                        "", 
-                        login_page);
-
-    if (get_err != ESP_OK) {
-      ESP_LOGE(TAG, "Failed to load login form");
-      return false;
-    }
-
     ESP_LOGD(TAG, "Extracting login token");
     this->_request(
              "http://" + this->host_ + "/api/model.json?internalapi=1",
