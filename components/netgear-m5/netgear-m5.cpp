@@ -252,41 +252,39 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
   ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
   auto *ctx = static_cast<RequestContext *>(evt->user_data);
-  auto *self = ctx->instance;
-  auto *ctx_resp = ctx->response;
+  if (!ctx) return ESP_FAIL;
+
+  NetgearM5Component *self = ctx->instance;
+  std::string *resp = ctx->response;
 
   switch (evt->event_id) {
     case HTTP_EVENT_ERROR:
       ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
       break;
     case HTTP_EVENT_HEADERS_SENT:
-        ESP_LOGD(TAG, "HTTP_EVENT_HEADERS_SENT");
-        break;
+      ESP_LOGD(TAG, "HTTP_EVENT_HEADERS_SENT");
+      break;
     case HTTP_EVENT_ON_HEADER:
-        ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
-        break;
+      ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
+      break;
     case HTTP_EVENT_ON_CONNECTED:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
       // new request/redirect chain step
       if (evt->user_data) {
-        auto *resp = static_cast<std::string *>(evt->user_data);
-        resp->clear();
+        resp->clear();  // start fresh on new request
       }
       break;
     case HTTP_EVENT_ON_DATA:
-      if (evt->user_data && evt->data_len > 0) {
-        auto *resp = static_cast<std::string *>(ctx_resp);
+      if (evt->data && evt->data_len > 0) {
         resp->append((const char *)evt->data, evt->data_len);
       }
       break;
     case HTTP_EVENT_REDIRECT: {
       ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
 
-      // Extract cookies from response headers
-      char *cookie_val = nullptr;
-      if (esp_http_client_get_header(evt->client, "Set-Cookie", &cookie_val) ==
-              ESP_OK &&
-          cookie_val) {
+      const char *cookie_val =
+          esp_http_client_get_header(evt->client, "Set-Cookie");
+      if (cookie_val) {
         self->cookies_.push_back(std::string(cookie_val));
         ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
       }
