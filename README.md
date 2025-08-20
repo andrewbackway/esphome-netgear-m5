@@ -17,12 +17,6 @@ This project provides an ESPHome component for integrating with Netgear M5 route
 - ESP32 or compatible microcontroller with network connectivity
 - Netgear M5 router with accessible API endpoint
 
-## Installation
-
-1. **Clone or Copy Files**: Place the provided files (`__init__.py`, `netgear-m5.cpp`, `netgear-m5.h`) in your ESPHome custom components directory (e.g., `custom_components/netgear_m5/`).
-2. **Configure ESPHome YAML**: Add the component configuration to your ESPHome YAML file (see configuration example below).
-3. **Compile and Upload**: Use the ESPHome dashboard or CLI to compile and upload the firmware to your ESP32 device.
-
 ## Configuration
 
 Add the following to your ESPHome YAML configuration file:
