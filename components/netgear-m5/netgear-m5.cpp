@@ -290,25 +290,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
     case HTTP_EVENT_REDIRECT: {
       ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
 
-      char *cookie_val = nullptr;
-      if (esp_http_client_get_header(evt->client, "Set-Cookie", &cookie_val) ==
-              ESP_OK &&
-          cookie_val) {
-        self->cookies_.push_back(std::string(cookie_val));
-        ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
-      }
-
-      if (!self->cookies_.empty()) {
-        std::string cookie_header;
-        for (const auto &c : self->cookies_) {
-          if (!cookie_header.empty()) cookie_header += "; ";
-          cookie_header += c;
-        }
-        esp_http_client_set_header(evt->client, "Cookie",
-                                   cookie_header.c_str());
-      }
-
-      esp_http_client_set_redirection(evt->client);
+      //esp_http_client_set_redirection(evt->client);
       break;
     }
     default:
