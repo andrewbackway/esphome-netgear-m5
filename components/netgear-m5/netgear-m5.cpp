@@ -1,7 +1,5 @@
 #include "netgear-m5.h"
-
 #include <ArduinoJson.h>
-
 #include <cstring>
 #include <string>
 
@@ -19,7 +17,7 @@ void NetgearM5Component::setup() {
 }
 
 void NetgearM5Component::loop() {
-  if (this->has_new_payload_) {
+  if (this->has_new_state_) {
     this->publish_pending_();
   }
 }
@@ -40,14 +38,41 @@ void NetgearM5Component::task_loop_() {
   for (;;) {
     if (!network::is_connected()) {
       ESP_LOGW(TAG, "Network not connected, skipping fetch");
-      vTaskDelay(pdMS_TO_TICKS(5000));  // Wait 5 seconds before retrying
+      vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
     }
     std::string body;
     if (this->fetch_once_(body)) {
+      JsonDocument doc;
+      DeserializationError err = deserializeJson(doc, body);
+      if (err) {
+        ESP_LOGW(TAG, "JSON parse failed: %s (payload size: %u bytes)",
+                 err.c_str(), body.size());
+        vTaskDelay(delay_ticks);
+        continue;
+      }
+      if (!doc.is<JsonObject>()) {
+        ESP_LOGW(TAG, "Parsed JSON is not an object");
+        vTaskDelay(delay_ticks);
+        continue;
+      }
+
       taskENTER_CRITICAL(&this->mux_);
-      this->last_payload_ = std::move(body);
-      this->has_new_payload_ = true;
+      this->state_.clear();
+      auto root = doc.as<ArduinoJson::JsonObjectConst>();
+      this->sec_token_ = dotted_lookup_("session.secToken", root);
+
+      // Store all bound values
+      for (const auto &b : this->num_bindings_) {
+        this->state_[b.path] = dotted_lookup_(b.path, root);
+      }
+      for (const auto &b : this->text_bindings_) {
+        this->state_[b.path] = dotted_lookup_(b.path, root);
+      }
+      for (const auto &b : this->bin_bindings_) {
+        this->state_[b.path] = dotted_lookup_(b.path, root);
+      }
+      this->has_new_state_ = true;
       taskEXIT_CRITICAL(&this->mux_);
     }
     vTaskDelay(delay_ticks);
@@ -57,13 +82,9 @@ void NetgearM5Component::task_loop_() {
 bool NetgearM5Component::fetch_once_(std::string &body) {
   ESP_LOGD(TAG, "Fetching data from Netgear M5");
   if (cookies_.empty()) {
-    // first request to get session cookie assigned
     esp_err_t first_err = this->_request(
         "http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=", HTTP_METHOD_GET,
-        "",  // body (none for GET)
-        "",  // content type
-        body);
-
+        "", "", body);
     if (first_err != ESP_OK || cookies_.empty()) {
       ESP_LOGE(TAG, "Unable to obtain first cookie");
       return false;
@@ -73,33 +94,25 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
   if (!this->logged_in_) {
     ESP_LOGD(TAG, "Extracting login token");
     this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
-                   HTTP_METHOD_GET,
-                   "",  // body (none for GET)
-                   "",  // content type
-                   body);
+                   HTTP_METHOD_GET, "", "", body);
 
     taskENTER_CRITICAL(&this->mux_);
-    this->last_payload_ = std::move(body);
-    this->has_new_payload_ = true;
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, body);
+    if (!err && doc.is<JsonObject>()) {
+      this->sec_token_ = dotted_lookup_("session.secToken", doc.as<JsonObjectConst>());
+    }
     taskEXIT_CRITICAL(&this->mux_);
-
-    this->publish_pending_();
 
     if (this->sec_token_.empty()) {
       ESP_LOGE(TAG, "Failed to extract session token");
       return true;
     }
 
-    ESP_LOGD(TAG, "Parsing login token from response %s",
-             this->sec_token_.c_str());
-
     std::string login_body = "session.password=" + this->password_ +
-                             "&"
-                             "token=" +
-                             this->sec_token_ +
-                             "&"
-                             "ok_redirect=%2Findex.html&" +
-                             "err_redirect=%2Findex.html%3Floginfailed";
+                            "&token=" + this->sec_token_ +
+                            "&ok_redirect=%2Findex.html&" +
+                            "err_redirect=%2Findex.html%3Floginfailed";
 
     std::string login_response;
     esp_err_t login_err = this->_request(
@@ -112,16 +125,12 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     }
 
     this->logged_in_ = true;
-
     ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
   }
 
   return this->_request(
              "http://" + this->host_ + "/api/model.json?internalapi=1",
-             HTTP_METHOD_GET,
-             "",  // body (none for GET)
-             "",  // content type
-             body) == ESP_OK;
+             HTTP_METHOD_GET, "", "", body) == ESP_OK;
 }
 
 esp_err_t NetgearM5Component::_request(const std::string &url,
@@ -133,16 +142,15 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
   std::string current_url = url;
 
   while (true) {
-    ESP_LOGD(TAG, "Preparing HTTP request:  %s", current_url.c_str());
+    ESP_LOGD(TAG, "Preparing HTTP request: %s", current_url.c_str());
 
     esp_http_client_config_t config = {};
     config.url = current_url.c_str();
     config.event_handler = _event_handler;
     RequestContext ctx{this, &response};
     config.user_data = &ctx;
-    config.disable_auto_redirect = true;  // required to intercept cookies
+    config.disable_auto_redirect = true;
     config.timeout_ms = 120000;
-    // .is_async = true,
     config.buffer_size = 4096;
     config.buffer_size_tx = 4096;
 
@@ -154,7 +162,6 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 
     esp_http_client_set_method(client, method);
 
-    // Reattach stored cookies
     if (!cookies_.empty()) {
       std::string cookie_header;
       for (const auto &c : cookies_) {
@@ -180,23 +187,19 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
       this->last_status_code_ = status_code;
       ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
 
-      // Extract cookies from response headers
       auto setCookieValue = this->last_headers_.find("Set-Cookie");
       if (setCookieValue != this->last_headers_.end()) {
         ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
-        // store it, reuse later
         this->cookies_.clear();
         this->cookies_.push_back(setCookieValue->second);
       }
 
       if (status_code == 302) {
         auto locationValue = this->last_headers_.find("Location");
-
         if (locationValue != this->last_headers_.end() &&
             locationValue->second != current_url) {
           ESP_LOGI(TAG, "Redirect Location Found: %s",
                    locationValue->second.c_str());
-
           current_url = locationValue->second;
 
           size_t pos = current_url.find("index.html");
@@ -214,10 +217,7 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
     }
 
     esp_http_client_cleanup(client);
-
-    if (current_url.empty()) {
-      break;
-    }
+    if (current_url.empty()) break;
   }
   return err;
 }
@@ -240,30 +240,24 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
       if (evt->header_key && evt->header_value) {
         ESP_LOGD(TAG, "Header: %s: %s", evt->header_key, evt->header_value);
-        // Store headers in a map or vector if you want later access
         self->last_headers_[evt->header_key] = evt->header_value;
       }
       break;
     case HTTP_EVENT_ON_CONNECTED:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
-      // new request/redirect chain step
       if (evt->user_data) {
-        resp->clear();  // start fresh on new request
+        resp->clear();
         self->last_headers_.clear();
       }
       break;
     case HTTP_EVENT_ON_DATA:
-      // ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
       if (evt->data && evt->data_len > 0) {
         resp->append((const char *)evt->data, evt->data_len);
       }
       break;
-    case HTTP_EVENT_REDIRECT: {
+    case HTTP_EVENT_REDIRECT:
       ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
-
-      // esp_http_client_set_redirection(evt->client);
       break;
-    }
     default:
       ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
       break;
@@ -272,52 +266,24 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
 }
 
 void NetgearM5Component::publish_pending_() {
-  std::string payload = this->last_payload_;
-  // taskENTER_CRITICAL(&this->mux_);
-  // payload.swap(this->last_payload_);
-  this->has_new_payload_ = false;
-  // taskEXIT_CRITICAL(&this->mux_);
-  if (payload.empty()) {
-    ESP_LOGD(TAG, "No payload to process");
-    return;
-  }
-
-  ESP_LOGD(TAG, "Free heap before parsing: %u bytes", esp_get_free_heap_size());
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, payload);
-  if (err) {
-    ESP_LOGW(
-        TAG,
-        "JSON parse failed in publish_pending_: %s (payload size: %u bytes)",
-        err.c_str(), payload.size());
-    return;
-  }
-  ESP_LOGD(TAG, "Free heap after parsing: %u bytes", esp_get_free_heap_size());
-
-  // Check if doc is an object
-  if (!doc.is<JsonObject>()) {
-    ESP_LOGW(TAG, "Parsed JSON is not an object");
-    return;
-  }
-
-  // Use the entire document as root
-  auto root = doc.as<ArduinoJson::JsonObjectConst>();
-
-  this->sec_token_ = dotted_lookup_("session.secToken", root);
+  taskENTER_CRITICAL(&this->mux_);
+  auto state = this->state_;
+  this->has_new_state_ = false;
+  taskEXIT_CRITICAL(&this->mux_);
 
   // Numeric sensors
   for (auto &b : this->num_bindings_) {
     if (!b.sensor) continue;
-    std::string v = dotted_lookup_(b.path, root);
-    ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(),
-             v.c_str());
-    if (!v.empty()) {
+    auto it = state.find(b.path);
+    if (it != state.end() && !it->second.empty()) {
+      ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(),
+               it->second.c_str());
       char *endptr;
       errno = 0;
-      double value = strtod(v.c_str(), &endptr);
-      if (endptr == v.c_str() || *endptr != '\0' || errno == ERANGE) {
+      double value = strtod(it->second.c_str(), &endptr);
+      if (endptr == it->second.c_str() || *endptr != '\0' || errno == ERANGE) {
         ESP_LOGW(TAG, "Invalid numeric value at %s: %s", b.path.c_str(),
-                 v.c_str());
+                 it->second.c_str());
         continue;
       }
       b.sensor->publish_state(value);
@@ -327,22 +293,27 @@ void NetgearM5Component::publish_pending_() {
   // Text sensors
   for (auto &b : this->text_bindings_) {
     if (!b.sensor) continue;
-    std::string v = dotted_lookup_(b.path, root);
-    ESP_LOGD(TAG, "Text sensor path %s: value %s", b.path.c_str(), v.c_str());
-    if (!v.empty()) b.sensor->publish_state(v);
+    auto it = state.find(b.path);
+    if (it != state.end() && !it->second.empty()) {
+      ESP_LOGD(TAG, "Text sensor path %s: value %s", b.path.c_str(),
+               it->second.c_str());
+      b.sensor->publish_state(it->second);
+    }
   }
 
   // Binary sensors
   for (auto &b : this->bin_bindings_) {
     if (!b.sensor) continue;
-    std::string v = dotted_lookup_(b.path, root);
-    ESP_LOGD(TAG, "Binary sensor path %s: value %s (on: %s, off: %s)",
-             b.path.c_str(), v.c_str(), b.on_value.c_str(),
-             b.off_value.c_str());
-    if (v == b.on_value) {
-      b.sensor->publish_state(true);
-    } else if (v == b.off_value) {
-      b.sensor->publish_state(false);
+    auto it = state.find(b.path);
+    if (it != state.end()) {
+      ESP_LOGD(TAG, "Binary sensor path %s: value %s (on: %s, off: %s)",
+               b.path.c_str(), it->second.c_str(), b.on_value.c_str(),
+               b.off_value.c_str());
+      if (it->second == b.on_value) {
+        b.sensor->publish_state(true);
+      } else if (it->second == b.off_value) {
+        b.sensor->publish_state(false);
+      }
     }
   }
 }
@@ -354,16 +325,10 @@ std::string NetgearM5Component::dotted_lookup_(
   ::ArduinoJson::JsonVariantConst cur = root;
   size_t i = 0;
 
-  // Log the root JSON for debugging
-  std::string root_json;
-  serializeJson(root, root_json);
-  // ESP_LOGD(TAG, "Root JSON: %s", root_json.c_str());
-
   while (i < path.size()) {
     size_t dot = path.find('.', i);
     std::string token =
         path.substr(i, dot == std::string::npos ? std::string::npos : dot - i);
-    // ESP_LOGD(TAG, "Processing token: %s", token.c_str());
 
     size_t lb = token.find('[');
     if (lb != std::string::npos && token.back() == ']') {

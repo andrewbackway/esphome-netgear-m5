@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 #include "esp_http_client.h"
 #include "esphome.h"
@@ -55,11 +56,6 @@ class NetgearM5Component : public Component {
   esp_err_t _request(const std::string &url, esp_http_client_method_t method,
                      const std::string &body, const std::string &content_type,
                      std::string &response);
-  esp_err_t _request_with_redirects(const std::string &url,
-                                    esp_http_client_method_t method,
-                                    const std::string &body,
-                                    const std::string &content_type,
-                                    std::string &response, int max_redirects);
 
   static esp_err_t _event_handler(esp_http_client_event_t *evt);
 
@@ -70,8 +66,8 @@ class NetgearM5Component : public Component {
   uint32_t poll_interval_ms_{30000};
 
   TaskHandle_t task_handle_{nullptr};
-  volatile bool has_new_payload_{false};
-  std::string last_payload_;
+  volatile bool has_new_state_{false};
+  std::map<std::string, std::string> state_;  // Stores parsed JSON values
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 
   struct NumBinding {
