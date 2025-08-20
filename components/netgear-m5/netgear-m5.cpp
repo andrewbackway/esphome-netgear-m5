@@ -184,7 +184,7 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
                                        const std::string &body,
                                        const std::string &content_type,
                                        std::string &response) {
-
+  esp_err_t err = nullptr;
   std::string current_url = url;
 
   while (true) {
@@ -228,7 +228,7 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
     }
 
     ESP_LOGD(TAG, "Sending HTTP request: %s", current_url.c_str());
-    esp_err_t err = esp_http_client_perform(client);
+    err = esp_http_client_perform(client);
 
     if (err == ESP_OK) {
       int status_code = esp_http_client_get_status_code(client);
@@ -246,7 +246,8 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
       if (status_code == 302) {
         auto locationValue = this->last_headers_.find("Location");
         if (locationValue != this->last_headers_.end()) {
-          ESP_LOGI(TAG, "Redirect Location Found: %s", locationValue->second.c_str());
+          ESP_LOGI(TAG, "Redirect Location Found: %s",
+                   locationValue->second.c_str());
 
           current_url = locationValue->second;
         }
