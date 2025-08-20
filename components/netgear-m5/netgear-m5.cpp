@@ -84,7 +84,7 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
 
     if ( this->sec_token_.empty()) {
         ESP_LOGE(TAG, "Failed to extract session token");
-        return false;
+        return true;
     }
 
 
