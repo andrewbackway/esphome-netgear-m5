@@ -99,6 +99,11 @@ namespace esphome
       std::vector<NumBinding> num_bindings_;
       std::vector<TextBinding> text_bindings_;
       std::vector<BinBinding> bin_bindings_;
+
+    struct RequestContext {
+        NetgearM5Component *instance;
+        std::string *response;
+    };
     };
 
   } // namespace netgear_m5

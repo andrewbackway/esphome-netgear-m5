@@ -207,7 +207,8 @@ namespace esphome
             esp_http_client_config_t config = {};
             config.url = url.c_str();
             config.event_handler = _event_handler;
-            config.user_data = &response;
+            RequestContext ctx { this, &response };
+            config.user_data = &ctx;
             config.disable_auto_redirect = true; // required to intercept cookies
 
             esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -273,6 +274,10 @@ namespace esphome
 
         esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt)
         {
+            auto *ctx = static_cast<RequestContext *>(evt->user_data);
+            auto *self = ctx->instance;
+            auto *ctx_resp = ctx->response;
+
             switch (evt->event_id)
             {
             case HTTP_EVENT_ON_CONNECTED:
@@ -286,22 +291,22 @@ namespace esphome
             case HTTP_EVENT_ON_DATA:
                 if (evt->user_data && evt->data_len > 0)
                 {
-                    auto *resp = static_cast<std::string *>(evt->user_data);
+                    auto *resp = static_cast<std::string *>(ctx_resp);
                     resp->append((const char *)evt->data, evt->data_len);
                 }
                 break;
-            case HTTP_EVENT_REDIRECT:
+            case HTTP_EVENT_REDIRECT: {
                 ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
 
                  // Extract cookies from response headers
                 char *cookie_val = nullptr;
                 if (esp_http_client_get_header(evt->client, "Set-Cookie", &cookie_val) == ESP_OK && cookie_val)
                 {
-                    cookies_.push_back(std::string(cookie_val));
+                    self->cookies_.push_back(std::string(cookie_val));
                     ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
                 }
 
-                if (!cookies_.empty())
+                if (!self->cookies_.empty())
                 {
                     std::string cookie_header;
                     for (const auto &c : cookies_)
@@ -315,6 +320,7 @@ namespace esphome
 
                 esp_http_client_set_redirection(evt->client);
                 break;  
+            }
             default:
                 break;
             }
