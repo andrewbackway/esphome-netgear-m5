@@ -234,12 +234,11 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
     ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
 
     // Extract cookies from response headers
-    char *cookie_val = nullptr;
-    if (esp_http_client_get_header(client, "Set-Cookie", &cookie_val) ==
-            ESP_OK &&
-        cookie_val) {
-      cookies_.push_back(std::string(cookie_val));
-      ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
+    auto setCookieValue = this->last_headers_.find("Set-Cookie");
+    if (it != this->last_headers_.end()) {
+      ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
+      // store it, reuse later
+      this->cookies_.push_back(setCookieValue->second);
     }
   } else {
     ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
@@ -290,7 +289,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
     case HTTP_EVENT_REDIRECT: {
       ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
 
-      //esp_http_client_set_redirection(evt->client);
+      // esp_http_client_set_redirection(evt->client);
       break;
     }
     default:
