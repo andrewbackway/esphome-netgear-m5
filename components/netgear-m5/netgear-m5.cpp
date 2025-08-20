@@ -266,7 +266,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       }
       break;
     case HTTP_EVENT_ON_DATA:
-      // ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
+      ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
       if (evt->data && evt->data_len > 0) {
         resp->append((const char *)evt->data, evt->data_len);
       }
