@@ -79,6 +79,14 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
              "",  // content type
              body);
 
+
+    this->publish_pending_();
+
+    if ( this->sec_token_.empty()) {
+        ESP_LOGE(TAG, "Failed to extract session token");
+    }
+
+
     ESP_LOGD(TAG, "Parsing login token from response %s", this->sec_token_.c_str() );
 
     std::string login_body =
