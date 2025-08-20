@@ -255,12 +255,14 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
       }
     } else {
       ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+      current_url = nullptr;
     }
 
     esp_http_client_cleanup(client);
 
-    if ( !current_url )
-    break;
+    if (current_url.empty()) {
+      break;
+    }
   }
   return err;
 }
