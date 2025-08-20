@@ -184,7 +184,7 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
                                        const std::string &body,
                                        const std::string &content_type,
                                        std::string &response) {
-  esp_err_t err = nullptr;
+  esp_err_t err = ESP_FAIL;
   std::string current_url = url;
 
   while (true) {
