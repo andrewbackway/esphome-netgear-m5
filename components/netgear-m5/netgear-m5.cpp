@@ -100,6 +100,7 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
         "ok_redirect=%2Findex.html&" + 
         "err_redirect=%2Findex.html%3Floginfailed";
 
+    std::string login_response;
     esp_err_t login_err = this->_request(
         "http://" + this->host_ + "/Forms/config", 
         HTTP_METHOD_POST,
