@@ -286,7 +286,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       if (esp_http_client_get_header(evt->client, "Set-Cookie", &cookie_val) ==
               ESP_OK &&
           cookie_val) {
-        cookies_.push_back(std::string(cookie_val));
+        self->cookies_.push_back(std::string(cookie_val));
         ESP_LOGD(TAG, "Stored cookie: %s", cookie_val);
       }
 
