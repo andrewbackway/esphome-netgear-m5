@@ -72,37 +72,39 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
 
   if (!this->logged_in_) {
     ESP_LOGD(TAG, "Extracting login token");
-    this->_request(
-             "http://" + this->host_ + "/api/model.json?internalapi=1",
-             HTTP_METHOD_GET,
-             "",  // body (none for GET)
-             "",  // content type
-             body);
+    this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
+                   HTTP_METHOD_GET,
+                   "",  // body (none for GET)
+                   "",  // content type
+                   body);
 
+    taskENTER_CRITICAL(&this->mux_);
+    this->last_payload_ = std::move(body);
+    this->has_new_payload_ = true;
+    taskEXIT_CRITICAL(&this->mux_);
 
     this->publish_pending_();
 
-    if ( this->sec_token_.empty()) {
-        ESP_LOGE(TAG, "Failed to extract session token");
-        return true;
+    if (this->sec_token_.empty()) {
+      ESP_LOGE(TAG, "Failed to extract session token");
+      return true;
     }
 
+    ESP_LOGD(TAG, "Parsing login token from response %s",
+             this->sec_token_.c_str());
 
-    ESP_LOGD(TAG, "Parsing login token from response %s", this->sec_token_.c_str() );
-
-    std::string login_body =
-        "session.password=" + this->password_ + "&"
-        "token=" +  this->sec_token_ + "&"
-        "ok_redirect=%2Findex.html&" + 
-        "err_redirect=%2Findex.html%3Floginfailed";
+    std::string login_body = "session.password=" + this->password_ +
+                             "&"
+                             "token=" +
+                             this->sec_token_ +
+                             "&"
+                             "ok_redirect=%2Findex.html&" +
+                             "err_redirect=%2Findex.html%3Floginfailed";
 
     std::string login_response;
     esp_err_t login_err = this->_request(
-        "http://" + this->host_ + "/Forms/config", 
-        HTTP_METHOD_POST,
-        login_body,
-        "application/x-www-form-urlencoded", 
-        login_response);
+        "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
+        "application/x-www-form-urlencoded", login_response);
 
     if (login_err != ESP_OK) {
       ESP_LOGE(TAG, "Login failed");
@@ -204,7 +206,6 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
         }
       } else {
         current_url.clear();
-        ;
       }
     } else {
       ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
@@ -251,7 +252,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       }
       break;
     case HTTP_EVENT_ON_DATA:
-      //ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
+      // ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
       if (evt->data && evt->data_len > 0) {
         resp->append((const char *)evt->data, evt->data_len);
       }
@@ -271,10 +272,10 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
 
 void NetgearM5Component::publish_pending_() {
   std::string payload = this->last_payload_;
-  //taskENTER_CRITICAL(&this->mux_);
-  //payload.swap(this->last_payload_);
+  // taskENTER_CRITICAL(&this->mux_);
+  // payload.swap(this->last_payload_);
   this->has_new_payload_ = false;
-  //taskEXIT_CRITICAL(&this->mux_);
+  // taskEXIT_CRITICAL(&this->mux_);
   if (payload.empty()) {
     ESP_LOGD(TAG, "No payload to process");
     return;
