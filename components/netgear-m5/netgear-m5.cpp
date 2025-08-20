@@ -185,6 +185,7 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
       if (setCookieValue != this->last_headers_.end()) {
         ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
         // store it, reuse later
+        this->cookies_.clear();
         this->cookies_.push_back(setCookieValue->second);
       }
 
