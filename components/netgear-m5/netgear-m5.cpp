@@ -70,74 +70,60 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     }
   }
 
-  /*
-if (!this->logged_in_)
-{
-  std::string login_page;
-  ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
-  esp_err_t get_err = this->_request_with_redirects(
-      "http://" + this->host_ + "/index.html",
-      HTTP_METHOD_GET,
-      "",
-      "",
-      login_page,
-      5);
+  if (!this->logged_in_) {
+    std::string login_page;
+    ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
+    esp_err_t get_err =
+        this->_request_with_redirects("http://" + this->host_ + "/index.html",
+                                      HTTP_METHOD_GET, "", "", login_page, 5);
 
-  if (get_err != ESP_OK)
-  {
+    if (get_err != ESP_OK) {
       ESP_LOGE(TAG, "Failed to load login form");
       return false;
-  }
+    }
 
-  ESP_LOGD(TAG, "Extracting login token");
+    ESP_LOGD(TAG, "Extracting login token");
 
-  // --- crude token extraction ---
-  std::string token;
-  const std::string marker = "id=\"login_token\"name=\"token\" value=\"";
-  size_t pos = login_page.find(marker);
-  if (pos != std::string::npos)
-  {
+    // --- crude token extraction ---
+    std::string token;
+    const std::string marker = "id=\"login_token\"name=\"token\" value=\"";
+    size_t pos = login_page.find(marker);
+    if (pos != std::string::npos) {
       pos += marker.size();
       size_t end = login_page.find("\"", pos);
-      if (end != std::string::npos)
-      {
-          token = login_page.substr(pos, end - pos);
-          ESP_LOGD(TAG, "Extracted token: %s", token.c_str());
+      if (end != std::string::npos) {
+        token = login_page.substr(pos, end - pos);
+        ESP_LOGD(TAG, "Extracted token: %s", token.c_str());
       }
-  }
+    }
 
-  if (token.empty())
-  {
+    if (token.empty()) {
       ESP_LOGE(TAG, "Failed to extract login token");
       return false;
+    }
+    std::string login_response;
+    std::string login_body =
+        "session.password=" + this->password_ +
+        "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+    // std::string login_body = "session.password=" + this->password_ +
+    // "&token="
+    +token +
+        "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+
+    esp_err_t login_err = this->_request(
+        "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
+        "application/x-www-form-urlencoded", login_response);
+
+    if (login_err != ESP_OK) {
+      ESP_LOGE(TAG, "Login failed");
+      return false;
+    }
+
+    this->logged_in_ = true;
+
+    ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
   }
-  */
-  /*
-   std::string login_response;
-   std::string login_body = "session.password=" + this->password_ +
-"ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
-   // std::string login_body = "session.password=" + this->password_ + "&token="
-+ token + "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
-
-   esp_err_t login_err = this->_request(
-       "http://" + this->host_ + "/Forms/config",
-       HTTP_METHOD_POST,
-       login_body,
-       "application/x-www-form-urlencoded",
-       login_response);
-
-   if (login_err != ESP_OK)
-   {
-       ESP_LOGE(TAG, "Login failed");
-       return false;
-   }
-
-   this->logged_in_ = true;
-
-   ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
-
-}
-*/
+  
   return this->_request(
              "http://" + this->host_ + "/api/model.json?internalapi=1",
              HTTP_METHOD_GET,
@@ -145,39 +131,6 @@ if (!this->logged_in_)
              "",  // content type
              body) == ESP_OK;
 }
-/*
-esp_err_t NetgearM5Component::_request_with_redirects(
-    const std::string &url, esp_http_client_method_t method,
-    const std::string &body, const std::string &content_type,
-    std::string &response, int max_redirects) {
-  std::string current_url = url;
-
-  ESP_LOGI(TAG, "Starting HTTP request with redirects: %s",
-           current_url.c_str());
-
-  for (int i = 0; i <= max_redirects; i++) {
-    esp_err_t err =
-        this->_request(current_url, method, body, content_type, response);
-    if (err != ESP_OK) return err;
-
-    int status_code = this->last_status_code_;  // capture inside _request
-    if (status_code >= 300 && status_code < 400) {
-      const char *location =
-          this->last_location_header_.c_str();  // extract inside _request
-      if (!location || i == max_redirects) {
-        ESP_LOGW(TAG, "Max redirects reached or no Location header");
-        return ESP_FAIL;
-      }
-      ESP_LOGI(TAG, "Following redirect to %s", location);
-      current_url = location;
-      continue;  // retry loop
-    }
-
-    return err;  // success or non-redirect status
-  }
-  return ESP_FAIL;
-}
-  */
 
 esp_err_t NetgearM5Component::_request(const std::string &url,
                                        esp_http_client_method_t method,
@@ -245,9 +198,11 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 
       if (status_code == 302) {
         auto locationValue = this->last_headers_.find("Location");
-        
-        if (locationValue != this->last_headers_.end() && locationValue->second != current_url) {
-          ESP_LOGI(TAG, "Redirect Location Found: %s", locationValue->second.c_str());
+
+        if (locationValue != this->last_headers_.end() &&
+            locationValue->second != current_url) {
+          ESP_LOGI(TAG, "Redirect Location Found: %s",
+                   locationValue->second.c_str());
 
           current_url = locationValue->second;
 
@@ -257,7 +212,8 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
           }
         }
       } else {
-        current_url.clear();;
+        current_url.clear();
+        ;
       }
     } else {
       ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
