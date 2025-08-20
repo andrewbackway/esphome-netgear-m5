@@ -292,7 +292,7 @@ void NetgearM5Component::publish_pending_() {
   // Use the entire document as root
   auto root = doc.as<ArduinoJson::JsonObjectConst>();
 
-  this->sec_token_ = dotted_lookup_("device.session.secToken", root);
+  this->sec_token_ = dotted_lookup_("session.secToken", root);
 
   // Numeric sensors
   for (auto &b : this->num_bindings_) {
