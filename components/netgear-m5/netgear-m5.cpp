@@ -71,21 +71,24 @@ namespace esphome
         bool NetgearM5Component::fetch_once_(std::string &body)
         {
             ESP_LOGD(TAG, "Fetching data from Netgear M5");
-            /* Perform login if we don’t already have cookies
-            if (!this->logged_in_)
-            {
+            if (cookies_.empty()) {
                 // first request to get session cookie assigned
-                esp_err_t first_err = this->_request("http://" + this->host_ + "/index.html",
+                esp_err_t first_err = this->_request_with_redirects("http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=",
                                   HTTP_METHOD_GET,
                                   "", // body (none for GET)
                                   "", // content type
-                                  body);
-                if (first_err != ESP_OK)
+                                  body,
+                                  1);
+                                  
+                if (first_err != ESP_OK || cookies_.empty())
                 {
                     ESP_LOGE(TAG, "Unable to obtain first cookie");
                     return false;
                 }
+            }
 
+            if (!this->logged_in_)
+            {
                 /*
                 std::string login_page;
                 ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
@@ -147,6 +150,7 @@ namespace esphome
                 this->logged_in_ = true;
 
                 ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
+                
             }
 */
             return this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
@@ -202,7 +206,7 @@ namespace esphome
             config.url = url.c_str();
             config.event_handler = _event_handler;
             config.user_data = &response;
-            config.disable_auto_redirect = false;
+            config.disable_auto_redirect = true; // required to intercept cookies
 
             esp_http_client_handle_t client = esp_http_client_init(&config);
             if (client == nullptr)
