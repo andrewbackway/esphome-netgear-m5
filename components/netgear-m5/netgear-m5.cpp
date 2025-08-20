@@ -184,67 +184,84 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
                                        const std::string &body,
                                        const std::string &content_type,
                                        std::string &response) {
-  ESP_LOGD(TAG, "HTTP request:  %s", url.c_str());
 
-  esp_http_client_config_t config = {};
-  config.url = url.c_str();
-  config.event_handler = _event_handler;
-  RequestContext ctx{this, &response};
-  config.user_data = &ctx;
-  config.disable_auto_redirect = true;  // required to intercept cookies
-  config.timeout_ms = 120000;
-  // .is_async = true,
-  config.buffer_size = 4096;
-  config.buffer_size_tx = 4096;
+  std::string current_url = url;
 
-  esp_http_client_handle_t client = esp_http_client_init(&config);
-  if (client == nullptr) {
-    ESP_LOGE(TAG, "Failed to init HTTP client");
-    return ESP_FAIL;
-  }
+  while (true) {
+    ESP_LOGD(TAG, "Preparing HTTP request:  %s", current_url.c_str());
 
-  esp_http_client_set_method(client, method);
+    esp_http_client_config_t config = {};
+    config.url = current_url.c_str();
+    config.event_handler = _event_handler;
+    RequestContext ctx{this, &response};
+    config.user_data = &ctx;
+    config.disable_auto_redirect = true;  // required to intercept cookies
+    config.timeout_ms = 120000;
+    // .is_async = true,
+    config.buffer_size = 4096;
+    config.buffer_size_tx = 4096;
 
-  // Reattach stored cookies
-  if (!cookies_.empty()) {
-    std::string cookie_header;
-    for (const auto &c : cookies_) {
-      if (!cookie_header.empty()) cookie_header += "; ";
-      cookie_header += c;
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == nullptr) {
+      ESP_LOGE(TAG, "Failed to init HTTP client");
+      return ESP_FAIL;
     }
-    esp_http_client_set_header(client, "Cookie", cookie_header.c_str());
-  }
 
-  if (!body.empty()) {
-    esp_http_client_set_post_field(client, body.c_str(), body.size());
-    if (!content_type.empty()) {
-      esp_http_client_set_header(client, "Content-Type", content_type.c_str());
+    esp_http_client_set_method(client, method);
+
+    // Reattach stored cookies
+    if (!cookies_.empty()) {
+      std::string cookie_header;
+      for (const auto &c : cookies_) {
+        if (!cookie_header.empty()) cookie_header += "; ";
+        cookie_header += c;
+      }
+      esp_http_client_set_header(client, "Cookie", cookie_header.c_str());
     }
-  }
 
-  ESP_LOGD(TAG, "Performing HTTP request: %s", url.c_str());
-
-  esp_err_t err = esp_http_client_perform(client);
-
-  ESP_LOGD(TAG, "Performed HTTP request: %s", url.c_str());
-
-  if (err == ESP_OK) {
-    int status_code = esp_http_client_get_status_code(client);
-    this->last_status_code_ = status_code;
-    ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
-
-    // Extract cookies from response headers
-    auto setCookieValue = this->last_headers_.find("Set-Cookie");
-    if (setCookieValue != this->last_headers_.end()) {
-      ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
-      // store it, reuse later
-      this->cookies_.push_back(setCookieValue->second);
+    if (!body.empty()) {
+      esp_http_client_set_post_field(client, body.c_str(), body.size());
+      if (!content_type.empty()) {
+        esp_http_client_set_header(client, "Content-Type",
+                                   content_type.c_str());
+      }
     }
-  } else {
-    ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
-  }
 
-  esp_http_client_cleanup(client);
+    ESP_LOGD(TAG, "Sending HTTP request: %s", current_url.c_str());
+    esp_err_t err = esp_http_client_perform(client);
+
+    if (err == ESP_OK) {
+      int status_code = esp_http_client_get_status_code(client);
+      this->last_status_code_ = status_code;
+      ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
+
+      // Extract cookies from response headers
+      auto setCookieValue = this->last_headers_.find("Set-Cookie");
+      if (setCookieValue != this->last_headers_.end()) {
+        ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
+        // store it, reuse later
+        this->cookies_.push_back(setCookieValue->second);
+      }
+
+      if (status_code == 302) {
+        auto locationValue = this->last_headers_.find("Location");
+        if (locationValue != this->last_headers_.end()) {
+          ESP_LOGI(TAG, "Redirect Location Found: %s", locationValue->second.c_str());
+
+          current_url = locationValue->second;
+        }
+      } else {
+        current_url = nullptr;
+      }
+    } else {
+      ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+    }
+
+    esp_http_client_cleanup(client);
+
+    if ( !current_url )
+    break;
+  }
   return err;
 }
 
@@ -266,7 +283,6 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
       if (evt->header_key && evt->header_value) {
         ESP_LOGD(TAG, "Header: %s: %s", evt->header_key, evt->header_value);
-
         // Store headers in a map or vector if you want later access
         self->last_headers_[evt->header_key] = evt->header_value;
       }
@@ -281,7 +297,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       }
       break;
     case HTTP_EVENT_ON_DATA:
-      ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
+      // ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
       if (evt->data && evt->data_len > 0) {
         resp->append((const char *)evt->data, evt->data_len);
       }
