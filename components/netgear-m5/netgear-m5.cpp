@@ -245,22 +245,23 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 
       if (status_code == 302) {
         auto locationValue = this->last_headers_.find("Location");
-        if (locationValue->second != current_url) {
+        
+        if (locationValue != this->last_headers_.end() && locationValue->second != current_url) {
           ESP_LOGI(TAG, "Redirect Location Found: %s", locationValue->second.c_str());
 
           current_url = locationValue->second;
 
           size_t pos = current_url.find("index.html");
           if (pos != std::string::npos) {
-            current_url = nullptr;
+            current_url.clear();
           }
         }
       } else {
-        current_url = nullptr;
+        current_url.clear();;
       }
     } else {
       ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
-      current_url = nullptr;
+      current_url.clear();
     }
 
     esp_http_client_cleanup(client);
@@ -293,7 +294,6 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
         // Store headers in a map or vector if you want later access
         self->last_headers_[evt->header_key] = evt->header_value;
       }
-      break;
       break;
     case HTTP_EVENT_ON_CONNECTED:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
