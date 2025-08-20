@@ -59,7 +59,6 @@ void NetgearM5Component::task_loop_() {
         continue;
       }
 
-      taskENTER_CRITICAL(&this->mux_);
       this->state_.clear();
       auto root = doc.as<ArduinoJson::JsonObjectConst>();
       this->sec_token_ = dotted_lookup_("session.secToken", root);
@@ -75,7 +74,6 @@ void NetgearM5Component::task_loop_() {
         this->state_[b.path] = dotted_lookup_(b.path, root);
       }
       this->has_new_state_ = true;
-      taskEXIT_CRITICAL(&this->mux_);
     }
     vTaskDelay(delay_ticks);
   }
