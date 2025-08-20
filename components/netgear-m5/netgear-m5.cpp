@@ -191,6 +191,10 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
   RequestContext ctx{this, &response};
   config.user_data = &ctx;
   config.disable_auto_redirect = true;  // required to intercept cookies
+  config.timeout_ms = 120000;
+  // .is_async = true,
+  config.buffer_size = 4096;
+  config.buffer_size_tx = 4096;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (client == nullptr) {
