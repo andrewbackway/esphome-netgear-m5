@@ -1,5 +1,7 @@
 #include "netgear-m5.h"
+
 #include <ArduinoJson.h>
+
 #include <cstring>
 #include <string>
 
@@ -96,13 +98,16 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     this->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
                    HTTP_METHOD_GET, "", "", body);
 
-    taskENTER_CRITICAL(&this->mux_);
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, body);
-    if (!err && doc.is<JsonObject>()) {
-      this->sec_token_ = dotted_lookup_("session.secToken", doc.as<JsonObjectConst>());
+    if (err) {
+      ESP_LOGW(TAG, "JSON parse failed: %s", err.c_str());
+      return false;
     }
-    taskEXIT_CRITICAL(&this->mux_);
+    if (doc.is<JsonObject>()) {
+      this->sec_token_ =
+          dotted_lookup_("session.secToken", doc.as<JsonObjectConst>());
+    }
 
     if (this->sec_token_.empty()) {
       ESP_LOGE(TAG, "Failed to extract session token");
@@ -110,9 +115,9 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     }
 
     std::string login_body = "session.password=" + this->password_ +
-                            "&token=" + this->sec_token_ +
-                            "&ok_redirect=%2Findex.html&" +
-                            "err_redirect=%2Findex.html%3Floginfailed";
+                             "&token=" + this->sec_token_ +
+                             "&ok_redirect=%2Findex.html&" +
+                             "err_redirect=%2Findex.html%3Floginfailed";
 
     std::string login_response;
     esp_err_t login_err = this->_request(
