@@ -309,7 +309,7 @@ namespace esphome
                 if (!self->cookies_.empty())
                 {
                     std::string cookie_header;
-                    for (const auto &c : cookies_)
+                    for (const auto &c : self->cookies_)
                     {
                         if (!cookie_header.empty())
                             cookie_header += "; ";
