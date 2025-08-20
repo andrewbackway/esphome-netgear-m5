@@ -245,15 +245,15 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 
       if (status_code == 302) {
         auto locationValue = this->last_headers_.find("Location");
-        if (locationValue != this->last_headers_.end()) {
-          ESP_LOGI(TAG, "Redirect Location Found: %s",
-                   locationValue->second.c_str());
+        if (locationValue->second != current_url) {
+          ESP_LOGI(TAG, "Redirect Location Found: %s", locationValue->second.c_str());
 
           current_url = locationValue->second;
 
-        size_t pos = current_url.find("index.html");
-        if (pos != std::string::npos) {
-          current_url = nullptr;
+          size_t pos = current_url.find("index.html");
+          if (pos != std::string::npos) {
+            current_url = nullptr;
+          }
         }
       } else {
         current_url = nullptr;
