@@ -145,7 +145,7 @@ if (!this->logged_in_)
              "",  // content type
              body) == ESP_OK;
 }
-
+/*
 esp_err_t NetgearM5Component::_request_with_redirects(
     const std::string &url, esp_http_client_method_t method,
     const std::string &body, const std::string &content_type,
@@ -177,6 +177,7 @@ esp_err_t NetgearM5Component::_request_with_redirects(
   }
   return ESP_FAIL;
 }
+  */
 
 esp_err_t NetgearM5Component::_request(const std::string &url,
                                        esp_http_client_method_t method,
