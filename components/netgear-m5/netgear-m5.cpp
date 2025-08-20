@@ -283,7 +283,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
 
       char *cookie_val = nullptr;
-      if (esp_http_client_get_header(client, "Set-Cookie", &cookie_val) ==
+      if (esp_http_client_get_header(evt->client, "Set-Cookie", &cookie_val) ==
               ESP_OK &&
           cookie_val) {
         cookies_.push_back(std::string(cookie_val));
