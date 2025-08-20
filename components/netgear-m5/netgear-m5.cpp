@@ -250,7 +250,6 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 }
 
 esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
-  ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
   auto *ctx = static_cast<RequestContext *>(evt->user_data);
   if (!ctx) return ESP_FAIL;
 
@@ -275,6 +274,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       }
       break;
     case HTTP_EVENT_ON_DATA:
+      ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
       if (evt->data && evt->data_len > 0) {
         resp->append((const char *)evt->data, evt->data_len);
       }
@@ -304,6 +304,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       break;
     }
     default:
+        ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
       break;
   }
   return ESP_OK;
