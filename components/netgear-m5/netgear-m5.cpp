@@ -213,6 +213,7 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 
           size_t pos = current_url.find("index.html");
           if (pos != std::string::npos) {
+            ESP_LOGI(TAG, "Cancelling redirection to index.html");
             current_url.clear();
           }
         }
