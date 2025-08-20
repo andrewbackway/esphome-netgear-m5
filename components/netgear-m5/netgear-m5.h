@@ -63,6 +63,7 @@ class NetgearM5Component : public Component {
 
   static esp_err_t _event_handler(esp_http_client_event_t *evt);
 
+  std::string sec_token_;
   std::string host_;
   std::string password_;
   std::string cookie_;

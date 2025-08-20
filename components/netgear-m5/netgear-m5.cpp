@@ -85,32 +85,20 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     }
 
     ESP_LOGD(TAG, "Extracting login token");
+    this->_request(
+             "http://" + this->host_ + "/api/model.json?internalapi=1",
+             HTTP_METHOD_GET,
+             "",  // body (none for GET)
+             "",  // content type
+             body);
 
-    // --- crude token extraction ---
-    std::string token;
-    const std::string marker = "id=\"login_token\"name=\"token\" value=\"";
-    size_t pos = login_page.find(marker);
-    if (pos != std::string::npos) {
-      pos += marker.size();
-      size_t end = login_page.find("\"", pos);
-      if (end != std::string::npos) {
-        token = login_page.substr(pos, end - pos);
-        ESP_LOGD(TAG, "Extracted token: %s", token.c_str());
-      }
-    }
+    ESP_LOGD(TAG, "Parsing login token from response %s", this->sec_token_.c_str() );
 
-    if (token.empty()) {
-      ESP_LOGE(TAG, "Failed to extract login token");
-      return false;
-    }
-    std::string login_response;
     std::string login_body =
-        "session.password=" + this->password_ +
-        "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
-    // std::string login_body = "session.password=" + this->password_ +
-    // "&token="
-    // +token +
-        // "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+        "session.password=" + this->password_ + "&"
+        "token=" +  this->sec_token_ + "&"
+        "ok_redirect=%2Findex.html&" + 
+        "err_redirect=%2Findex.html%3Floginfailed";
 
     esp_err_t login_err = this->_request(
         "http://" + this->host_ + "/Forms/config", 
@@ -266,7 +254,7 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
       }
       break;
     case HTTP_EVENT_ON_DATA:
-      ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
+      //ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA");
       if (evt->data && evt->data_len > 0) {
         resp->append((const char *)evt->data, evt->data_len);
       }
@@ -315,6 +303,8 @@ void NetgearM5Component::publish_pending_() {
 
   // Use the entire document as root
   auto root = doc.as<ArduinoJson::JsonObjectConst>();
+
+  this->sec_token_ = dotted_lookup_("device.session.secToken", root);
 
   // Numeric sensors
   for (auto &b : this->num_bindings_) {
