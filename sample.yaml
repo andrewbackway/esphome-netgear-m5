@@ -42,7 +42,7 @@ netgear-m5:
     unit_of_measurement: "dB"
   - name: WiFi Clients
     path: wifi.clientCount
-  - name: Cell ID
+  - name: Cell Tower ID
     path: wwanadv.cellId
 
   text_sensors: 
