@@ -87,9 +87,9 @@ namespace esphome
                 }
             }
 
+                /*
             if (!this->logged_in_)
             {
-                /*
                 std::string login_page;
                 ESP_LOGD(TAG, "Fetching data from Netgear M5 1");
                 esp_err_t get_err = this->_request_with_redirects(
