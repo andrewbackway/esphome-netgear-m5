@@ -274,6 +274,7 @@ namespace esphome
 
         esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt)
         {
+            ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
             auto *ctx = static_cast<RequestContext *>(evt->user_data);
             auto *self = ctx->instance;
             auto *ctx_resp = ctx->response;
