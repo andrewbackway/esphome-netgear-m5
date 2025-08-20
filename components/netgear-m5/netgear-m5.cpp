@@ -258,6 +258,9 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
     case HTTP_EVENT_HEADERS_SENT:
         ESP_LOGD(TAG, "HTTP_EVENT_HEADERS_SENT");
         break;
+    case HTTP_EVENT_ON_HEADER:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
+        break;
     case HTTP_EVENT_ON_CONNECTED:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
       // new request/redirect chain step
