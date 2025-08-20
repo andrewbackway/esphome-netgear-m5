@@ -251,8 +251,9 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
 
           current_url = locationValue->second;
 
-          if ( current_url.find("index.html") != std::string::npos )
-            current_url = nullptr;
+        size_t pos = current_url.find("index.html");
+        if (pos != std::string::npos) {
+          current_url = nullptr;
         }
       } else {
         current_url = nullptr;
