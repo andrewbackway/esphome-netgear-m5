@@ -73,7 +73,7 @@ namespace esphome
             ESP_LOGD(TAG, "Fetching data from Netgear M5");
             if (cookies_.empty()) {
                 // first request to get session cookie assigned
-                esp_err_t first_err = this->_request_with_redirects("http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=",
+                esp_err_t first_err = this->_request("http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=",
                                   HTTP_METHOD_GET,
                                   "", // body (none for GET)
                                   "", // content type
