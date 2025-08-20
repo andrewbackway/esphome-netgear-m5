@@ -107,12 +107,15 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
         "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
     // std::string login_body = "session.password=" + this->password_ +
     // "&token="
-    +token +
-        "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
+    // +token +
+        // "ok_redirect=%2Findex.html&err_redirect=%2Findex.html%3Floginfailed";
 
     esp_err_t login_err = this->_request(
-        "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
-        "application/x-www-form-urlencoded", login_response);
+        "http://" + this->host_ + "/Forms/config", 
+        HTTP_METHOD_POST,
+        login_body,
+        "application/x-www-form-urlencoded", 
+        login_response);
 
     if (login_err != ESP_OK) {
       ESP_LOGE(TAG, "Login failed");
@@ -123,7 +126,7 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
 
     ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
   }
-  
+
   return this->_request(
              "http://" + this->host_ + "/api/model.json?internalapi=1",
              HTTP_METHOD_GET,
