@@ -295,7 +295,6 @@ void NetgearM5Component::publish_pending_() {
   for (auto &b : this->num_bindings_) {
     if (!b.sensor) continue;
     auto it = state.find(b.path);
-    if (b.path == "wwan.signalStrength.bars") continue;  // skip over as we inject this elsewhere
     if (it != state.end() && !it->second.empty()) {
       ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(),
                it->second.c_str());
