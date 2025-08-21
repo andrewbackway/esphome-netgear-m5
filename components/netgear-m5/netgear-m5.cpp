@@ -63,6 +63,23 @@ void NetgearM5Component::task_loop_() {
       auto root = doc.as<ArduinoJson::JsonObjectConst>();
       this->sec_token_ = dotted_lookup_("session.secToken", root);
 
+      float rsrp_dbm = dotted_lookup_("wwan.signalStrength.rsrp", root);
+      bool has_rsrp = (rsrp_dbm != NAN);
+
+      float rsrq_db = dotted_lookup_("wwan.signalStrength.rsrq", root);
+      bool has_rsrq = (rsrq_db != NAN);
+
+      float sinr_db = dotted_lookup_("wwan.signalStrength.sinr", root);
+      bool has_sinr = (sinr_db != NAN);
+
+      float rssi_dbm = dotted_lookup_("wwan.signalStrength.rssi", root);
+      bool has_rssi = (rssi_dbm != NAN);
+
+      int bars = this->calc_mobile_bars(has_rsrp, rsrp_dbm, has_rsrq, rsrq_db,
+                                        has_sinr, sinr_db, has_rssi, rssi_dbm);
+
+      this->state_["wwan.signalStrength.bars"] = bars;
+
       // Store all bound values
       for (const auto &b : this->num_bindings_) {
         this->state_[b.path] = dotted_lookup_(b.path, root);
@@ -278,6 +295,7 @@ void NetgearM5Component::publish_pending_() {
   for (auto &b : this->num_bindings_) {
     if (!b.sensor) continue;
     auto it = state.find(b.path);
+    if ( it == "wwan.signalStrength.bars") continue;
     if (it != state.end() && !it->second.empty()) {
       ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(),
                it->second.c_str());
@@ -424,6 +442,62 @@ void NetgearM5Component::bind_binary_sensor(const std::string &json_path,
                                             const std::string &on_value,
                                             const std::string &off_value) {
   this->bin_bindings_.push_back({json_path, s, on_value, off_value});
+}
+
+int NetgearM5Component::clamp01(int v, int lo, int hi) {
+  return v < lo ? lo : (v > hi ? hi : v);
+}
+
+int NetgearM5Component::bars_from_rsrp(float rsrp_dbm) {
+  if (rsrp_dbm >= -85) return 5;
+  if (rsrp_dbm >= -90) return 4;
+  if (rsrp_dbm >= -100) return 3;
+  if (rsrp_dbm >= -110) return 2;
+  if (rsrp_dbm >= -120) return 1;
+  return 0;
+}
+
+int NetgearM5Component::quality_adjust_from_rsrq(float rsrq_db) {
+  if (rsrq_db > -10) return 0;
+  if (rsrq_db >= -14) return -1;
+  return -2;
+}
+
+int NetgearM5Component::quality_adjust_from_sinr(float sinr_db) {
+  if (sinr_db >= 20) return +1;
+  if (sinr_db >= 13) return 0;
+  if (sinr_db >= 0) return -1;
+  return -2;
+}
+
+int NetgearM5Component::bars_from_rssi(float rssi_dbm) {
+  if (rssi_dbm >= -65) return 5;
+  if (rssi_dbm >= -75) return 4;
+  if (rssi_dbm >= -85) return 3;
+  if (rssi_dbm >= -95) return 2;
+  if (rssi_dbm >= -105) return 1;
+  return 0;
+}
+
+int NetgearM5Component::calc_mobile_bars(bool has_rsrp, float rsrp_dbm,
+                                         bool has_rsrq, float rsrq_db,
+                                         bool has_sinr, float sinr_db,
+                                         bool has_rssi, float rssi_dbm) {
+  int bars = -1;
+
+  if (has_rsrp) {
+    bars = bars_from_rsrp(rsrp_dbm);
+    if (has_rsrq)
+      bars += quality_adjust_from_rsrq(rsrq_db);
+    else if (has_sinr)
+      bars += quality_adjust_from_sinr(sinr_db);
+  } else if (has_rssi) {
+    bars = bars_from_rssi(rssi_dbm);
+  } else {
+    bars = 0;  // unknown
+  }
+
+  return clamp01(bars, 0, 5);
 }
 
 }  // namespace netgear_m5
