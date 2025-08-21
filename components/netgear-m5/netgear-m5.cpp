@@ -63,17 +63,17 @@ void NetgearM5Component::task_loop_() {
       auto root = doc.as<ArduinoJson::JsonObjectConst>();
       this->sec_token_ = dotted_lookup_("session.secToken", root);
 
-      float rsrp_dbm = dotted_lookup_("wwan.signalStrength.rsrp", root);
-      bool has_rsrp = (rsrp_dbm != NAN);
+      float rsrp_dbm = atof(dotted_lookup_("wwan.signalStrength.rsrp", root).c_str());
+      bool has_rsrp = !std::isnan(rsrp_dbm);
 
-      float rsrq_db = dotted_lookup_("wwan.signalStrength.rsrq", root);
-      bool has_rsrq = (rsrq_db != NAN);
+      float rsrq_db = atof(dotted_lookup_("wwan.signalStrength.rsrq", root).c_str());
+      bool has_rsrq = !std::isnan(rsrq_db);
 
-      float sinr_db = dotted_lookup_("wwan.signalStrength.sinr", root);
-      bool has_sinr = (sinr_db != NAN);
+      float sinr_db = atof(dotted_lookup_("wwan.signalStrength.sinr", root).c_str());
+      bool has_sinr = !std::isnan(sinr_db);
 
-      float rssi_dbm = dotted_lookup_("wwan.signalStrength.rssi", root);
-      bool has_rssi = (rssi_dbm != NAN);
+      float rssi_dbm = atof(dotted_lookup_("wwan.signalStrength.rssi", root).c_str());
+      bool has_rssi = !std::isnan(rssi_dbm);
 
       int bars = this->calc_mobile_bars(has_rsrp, rsrp_dbm, has_rsrq, rsrq_db,
                                         has_sinr, sinr_db, has_rssi, rssi_dbm);
@@ -295,7 +295,7 @@ void NetgearM5Component::publish_pending_() {
   for (auto &b : this->num_bindings_) {
     if (!b.sensor) continue;
     auto it = state.find(b.path);
-    if ( it == "wwan.signalStrength.bars") continue;
+    if (b.path == "wwan.signalStrength.bars") continue;  // skip over as we inject this elsewhere
     if (it != state.end() && !it->second.empty()) {
       ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(),
                it->second.c_str());
