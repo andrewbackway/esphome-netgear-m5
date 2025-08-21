@@ -1,8 +1,8 @@
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
-#include <map>
 
 #include "esp_http_client.h"
 #include "esphome.h"
@@ -41,6 +41,15 @@ class NetgearM5Component : public Component {
   const std::vector<std::string> &cookies() const { return cookies_; }
 
  protected:
+  int clamp01(int v, int lo, int hi);
+  int bars_from_rsrp(float rsrp_dbm);
+  int quality_adjust_from_rsrq(float rsrq_db);
+  int quality_adjust_from_sinr(float sinr_db);
+  int bars_from_rssi(float rssi_dbm);
+  int calc_mobile_bars(bool has_rsrp, float rsrp_dbm, bool has_rsrq,
+                       float rsrq_db, bool has_sinr, float sinr_db,
+                       bool has_rssi, float rssi_dbm);
+
   int last_status_code_ = 0;
   std::map<std::string, std::string> last_headers_;
   bool logged_in_ = false;
@@ -94,6 +103,5 @@ class NetgearM5Component : public Component {
     std::string *response;
   };
 };
-
 }  // namespace netgear_m5
 }  // namespace esphome

@@ -1,46 +1,66 @@
 esphome:
-  name: mywebui_bridge
+  name: ESPHome Netgear M5
 
 esp32:
   board: esp32dev
   framework:
     type: esp-idf
 
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
 external_components:
  - source: github://andrewbackway/esphome-netgear-m5
-   refresh: 1s
 
 logger:
 
+web_server:
+  version: 3
+  local: true
+
 netgear-m5:
-  host: mywebui.net
-  poll_interval: 5s
+  host: HOSTIP
+  password: PASSWORD
+  poll_interval: 10s
 
   sensors: 
-    - name: Battery Level
-      path: power.battChargeLevel
-      unit_of_measurement: "%"
-    - name: Device Temperature
-      path: general.devTemperature
-      unit_of_measurement: "°C"
-    - name: WWAN RSSI
-      path: wwan.signalStrength.rssi
-      unit_of_measurement: "dBm"
-    - name: WWAN RSRP
-      path: wwan.signalStrength.rsrp
-      unit_of_measurement: "dBm"
-    - name: WWAN RSRQ
-      path: wwan.signalStrength.rsrq
-      unit_of_measurement: "dB"
-    - name: WiFi Clients
-      path: wifi.clientCount
+  - name: Battery Level
+    path: power.battChargeLevel
+    unit_of_measurement: "%"
+  - name: Device Temperature
+    path: general.devTemperature
+    unit_of_measurement: "°C"
+  - name: RSSI
+    path: wwan.signalStrength.rssi
+    unit_of_measurement: "dBm"
+  - name: RSRP
+    path: wwan.signalStrength.rsrp
+    unit_of_measurement: "dBm"
+  - name: RSRQ
+    path: wwan.signalStrength.rsrq
+    unit_of_measurement: "dB"
+  - name: WiFi Clients
+    path: wifi.clientCount
+  - name: Cell Tower ID
+    path: wwanadv.cellId
 
   text_sensors: 
-    - name: Device Model
-      path: general.model
+  - name: Device Name
+    path: general.deviceName
+  - name: Mobile Carrier
+    path: wwan.registerNetworkDisplay 
+  - name: Mobile Band
+    path: wwan.connectionText    
+  - name: Mobile Status
+    path: wwan.connection
+  - name: Offload WiFi SSID
+    path: wifi.offload.connectionSsid
+  - name: Offload Scan Progress
+    path: wifi.offload.scanProgress
 
   binary_sensors:
-    - name: WAN Connected
-      path: wan.state
-      on_value: "up"
-      off_value: "down"
+    - name: Offloading via WiFi
+      path: wifi.offload.status
+      on_value: "On"
+      off_value: "Off"
