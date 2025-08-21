@@ -51,6 +51,8 @@ netgear-m5:
     path: wifi.clientCount
   - name: Cell Tower ID
     path: wwanadv.cellId
+  - name: Bars
+    path: wwan.signalStrength.bars
 
   text_sensors: 
   - name: Device Name
