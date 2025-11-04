@@ -9,6 +9,7 @@ namespace esphome {
 namespace netgear_m5 {
 
 static const char *const TAG = "netgear_m5";
+static constexpr size_t MAX_HTTP_BODY = 16 * 1024;  // 16 KB cap per response
 
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
@@ -28,7 +29,7 @@ void NetgearM5Component::dump_config() {
   ESP_LOGCONFIG(TAG, "Netgear M5 Component:");
   ESP_LOGCONFIG(TAG, "  Host: %s", this->host_.c_str());
   ESP_LOGCONFIG(TAG, "  Poll interval: %u ms",
-                (unsigned)this->poll_interval_ms_);
+                (unsigned) this->poll_interval_ms_);
 }
 
 void NetgearM5Component::task_trampoline_(void *param) {
@@ -49,7 +50,7 @@ void NetgearM5Component::task_loop_() {
       DeserializationError err = deserializeJson(doc, body);
       if (err) {
         ESP_LOGW(TAG, "JSON parse failed: %s (payload size: %u bytes)",
-                 err.c_str(), body.size());
+                 err.c_str(), (unsigned) body.size());
         vTaskDelay(delay_ticks);
         continue;
       }
@@ -63,22 +64,26 @@ void NetgearM5Component::task_loop_() {
       auto root = doc.as<ArduinoJson::JsonObjectConst>();
       this->sec_token_ = dotted_lookup_("session.secToken", root);
 
-      float rsrp_dbm = atof(dotted_lookup_("wwan.signalStrength.rsrp", root).c_str());
+      float rsrp_dbm =
+          atof(dotted_lookup_("wwan.signalStrength.rsrp", root).c_str());
       bool has_rsrp = !std::isnan(rsrp_dbm);
 
-      float rsrq_db = atof(dotted_lookup_("wwan.signalStrength.rsrq", root).c_str());
+      float rsrq_db =
+          atof(dotted_lookup_("wwan.signalStrength.rsrq", root).c_str());
       bool has_rsrq = !std::isnan(rsrq_db);
 
-      float sinr_db = atof(dotted_lookup_("wwan.signalStrength.sinr", root).c_str());
+      float sinr_db =
+          atof(dotted_lookup_("wwan.signalStrength.sinr", root).c_str());
       bool has_sinr = !std::isnan(sinr_db);
 
-      float rssi_dbm = atof(dotted_lookup_("wwan.signalStrength.rssi", root).c_str());
+      float rssi_dbm =
+          atof(dotted_lookup_("wwan.signalStrength.rssi", root).c_str());
       bool has_rssi = !std::isnan(rssi_dbm);
 
       int bars = this->calc_mobile_bars(has_rsrp, rsrp_dbm, has_rsrq, rsrq_db,
                                         has_sinr, sinr_db, has_rssi, rssi_dbm);
 
-      this->state_["wwan.signalStrength.bars"] = bars;
+      this->state_["wwan.signalStrength.bars"] = std::to_string(bars);
 
       // Store all bound values
       for (const auto &b : this->num_bindings_) {
@@ -145,12 +150,12 @@ bool NetgearM5Component::fetch_once_(std::string &body) {
     }
 
     this->logged_in_ = true;
-    ESP_LOGD(TAG, "Login OK, response size=%d", login_response.size());
+    ESP_LOGD(TAG, "Login OK, response size=%d", (int) login_response.size());
   }
 
-  return this->_request(
-             "http://" + this->host_ + "/api/model.json?internalapi=1",
-             HTTP_METHOD_GET, "", "", body) == ESP_OK;
+  return this
+             ->_request("http://" + this->host_ + "/api/model.json?internalapi=1",
+                        HTTP_METHOD_GET, "", "", body) == ESP_OK;
 }
 
 esp_err_t NetgearM5Component::_request(const std::string &url,
@@ -160,6 +165,10 @@ esp_err_t NetgearM5Component::_request(const std::string &url,
                                        std::string &response) {
   esp_err_t err = ESP_FAIL;
   std::string current_url = url;
+
+  // Bound and pre-reserve the response buffer for this request chain
+  response.clear();
+  response.reserve(MAX_HTTP_BODY);
 
   while (true) {
     ESP_LOGD(TAG, "Preparing HTTP request: %s", current_url.c_str());
@@ -266,13 +275,28 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t *evt) {
     case HTTP_EVENT_ON_CONNECTED:
       ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
       if (evt->user_data) {
+        // keep capacity, just reset size and headers
         resp->clear();
         self->last_headers_.clear();
       }
       break;
     case HTTP_EVENT_ON_DATA:
       if (evt->data && evt->data_len > 0) {
-        resp->append((const char *)evt->data, evt->data_len);
+        size_t remaining = 0;
+        if (resp->size() < MAX_HTTP_BODY)
+          remaining = MAX_HTTP_BODY - resp->size();
+
+        if (remaining == 0) {
+          ESP_LOGW(TAG,
+                   "Netgear M5 body reached MAX_HTTP_BODY (%d), truncating",
+                   (int) MAX_HTTP_BODY);
+          break;
+        }
+
+        size_t to_copy = evt->data_len;
+        if (to_copy > remaining) to_copy = remaining;
+
+        resp->append(static_cast<const char *>(evt->data), to_copy);
       }
       break;
     case HTTP_EVENT_REDIRECT:
@@ -372,7 +396,7 @@ std::string NetgearM5Component::dotted_lookup_(
       auto arr = cur.as<ArduinoJson::JsonArrayConst>();
       if (index < 0 || static_cast<size_t>(index) >= arr.size()) {
         ESP_LOGW(TAG, "Invalid array index: %d (array size: %u)", index,
-                 arr.size());
+                 (unsigned) arr.size());
         return {};
       }
       cur = arr[index];
