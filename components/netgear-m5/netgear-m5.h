@@ -50,6 +50,12 @@ class NetgearM5Component : public Component {
                        float rsrq_db, bool has_sinr, float sinr_db,
                        bool has_rssi, float rssi_dbm);
 
+
+    // Buffer for large /api/model.json responses (~24 KB)
+  static constexpr size_t MODEL_JSON_BUF_SIZE = 32 * 1024;
+  char model_json_buf_[MODEL_JSON_BUF_SIZE];
+  size_t model_json_len_{0};
+
   int last_status_code_ = 0;
   std::map<std::string, std::string> last_headers_;
   bool logged_in_ = false;
@@ -65,6 +71,12 @@ class NetgearM5Component : public Component {
   esp_err_t _request(const std::string &url, esp_http_client_method_t method,
                      const std::string &body, const std::string &content_type,
                      std::string &response);
+
+  esp_err_t request_into_buffer_(const std::string &url,
+            esp_http_client_method_t method,
+            const std::string &body,
+            const std::string &content_type,
+            char *buf, size_t cap, size_t &out_len);
 
   static esp_err_t _event_handler(esp_http_client_event_t *evt);
 
@@ -98,9 +110,12 @@ class NetgearM5Component : public Component {
   std::vector<TextBinding> text_bindings_;
   std::vector<BinBinding> bin_bindings_;
 
-  struct RequestContext {
+ struct RequestContext {
     NetgearM5Component *instance;
-    std::string *response;
+    std::string *response;  // used for small responses
+    char *buf;              // used for large responses (model.json)
+    size_t *len;            // current length when using buf
+    size_t cap;             // capacity of buf
   };
 };
 }  // namespace netgear_m5
