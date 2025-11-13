@@ -248,12 +248,15 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
             locationValue->second != current_url) {
           ESP_LOGI(TAG, "Redirect Location Found: %s",
                    locationValue->second.c_str());
-          current_url = locationValue->second;
-
-          size_t pos = current_url.find("index.html");
-          if (pos != std::string::npos) {
-            ESP_LOGI(TAG, "Cancelling redirection to index.html");
+          
+          // Only cancel index.html redirect for GET requests
+          // POST to /Forms/config needs to complete the redirect to finalize login
+          size_t pos = locationValue->second.find("index.html");
+          if (pos != std::string::npos && method == HTTP_METHOD_GET) {
+            ESP_LOGI(TAG, "Cancelling GET redirection to index.html");
             current_url.clear();
+          } else {
+            current_url = locationValue->second;
           }
         }
       } else {
@@ -338,6 +341,9 @@ esp_err_t NetgearM5Component::request_into_buffer_(
           if (pos != std::string::npos) {
             ESP_LOGI(TAG, "Cancelling redirection to index.html");
             current_url.clear();
+          } else {
+            // Reset buffer for redirect
+            out_len = 0;
           }
         }
       } else {
