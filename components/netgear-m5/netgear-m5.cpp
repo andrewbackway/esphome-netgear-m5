@@ -14,6 +14,11 @@ static constexpr size_t MAX_HTTP_BODY = 16 * 1024;  // 16 KB cap per response
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
 
+  // Reserve capacity for bindings to reduce heap fragmentation
+  this->num_bindings_.reserve(10);
+  this->text_bindings_.reserve(10);
+  this->bin_bindings_.reserve(5);
+
   xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
                           "netgear_m5_task", 8192, this, 4, &this->task_handle_,
                           1);
@@ -105,11 +110,11 @@ void NetgearM5Component::task_loop_() {
 
 bool NetgearM5Component::fetch_once_(std::string& body) {
   ESP_LOGD(TAG, "Fetching data from Netgear M5");
-  if (cookies_.empty()) {
+  if (cookie_.empty()) {
     esp_err_t first_err = this->_request(
         "http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=", HTTP_METHOD_GET,
         "", "", body);
-    if (first_err != ESP_OK || cookies_.empty()) {
+    if (first_err != ESP_OK || cookie_.empty()) {
       ESP_LOGE(TAG, "Unable to obtain first cookie");
       return false;
     }
@@ -211,13 +216,8 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
 
     esp_http_client_set_method(client, method);
 
-    if (!cookies_.empty()) {
-      std::string cookie_header;
-      for (const auto& c : cookies_) {
-        if (!cookie_header.empty()) cookie_header += "; ";
-        cookie_header += c;
-      }
-      esp_http_client_set_header(client, "Cookie", cookie_header.c_str());
+    if (!cookie_.empty()) {
+      esp_http_client_set_header(client, "Cookie", cookie_.c_str());
     }
 
     if (!body.empty()) {
@@ -239,8 +239,7 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
       auto setCookieValue = this->last_headers_.find("Set-Cookie");
       if (setCookieValue != this->last_headers_.end()) {
         ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
-        this->cookies_.clear();
-        this->cookies_.push_back(setCookieValue->second);
+        this->cookie_ = setCookieValue->second;
       }
 
       if (status_code == 302) {
@@ -301,13 +300,8 @@ esp_err_t NetgearM5Component::request_into_buffer_(
 
     esp_http_client_set_method(client, method);
 
-    if (!cookies_.empty()) {
-      std::string cookie_header;
-      for (const auto& c : cookies_) {
-        if (!cookie_header.empty()) cookie_header += "; ";
-        cookie_header += c;
-      }
-      esp_http_client_set_header(client, "Cookie", cookie_header.c_str());
+    if (!cookie_.empty()) {
+      esp_http_client_set_header(client, "Cookie", cookie_.c_str());
     }
 
     if (!body.empty()) {
@@ -329,8 +323,7 @@ esp_err_t NetgearM5Component::request_into_buffer_(
       auto setCookieValue = this->last_headers_.find("Set-Cookie");
       if (setCookieValue != this->last_headers_.end()) {
         ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
-        this->cookies_.clear();
-        this->cookies_.push_back(setCookieValue->second);
+        this->cookie_ = setCookieValue->second;
       }
 
       if (status_code == 302) {
@@ -447,6 +440,7 @@ void NetgearM5Component::publish_pending_() {
   taskENTER_CRITICAL(&this->mux_);
   auto state = this->state_;
   this->has_new_state_ = false;
+  this->state_.clear();  // Free memory after copying, sensors maintain their own state
   taskEXIT_CRITICAL(&this->mux_);
 
   // Numeric sensors

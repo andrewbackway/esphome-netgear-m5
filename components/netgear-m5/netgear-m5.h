@@ -37,8 +37,8 @@ class NetgearM5Component : public Component {
                           const std::string &on_value,
                           const std::string &off_value);
 
-  // Access cookie jar
-  const std::vector<std::string> &cookies() const { return cookies_; }
+  // Access cookie
+  const std::string &cookie() const { return cookie_; }
 
  protected:
   int clamp01(int v, int lo, int hi);
@@ -67,7 +67,6 @@ class NetgearM5Component : public Component {
       const std::string &path, const ::ArduinoJson::JsonVariantConst &root);
   void publish_pending_();
 
-  std::vector<std::string> cookies_;  // stores cookies between request
   esp_err_t _request(const std::string &url, esp_http_client_method_t method,
                      const std::string &body, const std::string &content_type,
                      std::string &response);
