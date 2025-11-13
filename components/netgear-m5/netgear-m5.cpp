@@ -111,9 +111,10 @@ void NetgearM5Component::task_loop_() {
 bool NetgearM5Component::fetch_once_(std::string& body) {
   ESP_LOGD(TAG, "Fetching data from Netgear M5 (free heap: %u bytes)", esp_get_free_heap_size());
   if (cookie_.empty()) {
+    std::string unused;  // Not collecting body - only need Set-Cookie header
     esp_err_t first_err = this->_request(
         "http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=", HTTP_METHOD_GET,
-        "", "", body);
+        "", "", unused);
     if (first_err != ESP_OK || cookie_.empty()) {
       ESP_LOGE(TAG, "Unable to obtain first cookie");
       return false;
@@ -158,10 +159,10 @@ bool NetgearM5Component::fetch_once_(std::string& body) {
                              "&ok_redirect=%2Findex.html&" +
                              "err_redirect=%2Findex.html%3Floginfailed";
 
-    std::string login_response;
+    std::string unused;  // Not collecting body - only need Set-Cookie header
     esp_err_t login_err = this->_request(
         "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
-        "application/x-www-form-urlencoded", login_response);
+        "application/x-www-form-urlencoded", unused);
 
     if (login_err != ESP_OK) {
       ESP_LOGE(TAG, "Login failed");
@@ -169,7 +170,7 @@ bool NetgearM5Component::fetch_once_(std::string& body) {
     }
 
     this->logged_in_ = true;
-    ESP_LOGD(TAG, "Login OK, response size=%d", (int)login_response.size());
+    ESP_LOGD(TAG, "Login OK");
   }
 
   // Main stats fetch: again into the fixed buffer
@@ -374,7 +375,11 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t* evt) {
       ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
       if (evt->header_key && evt->header_value) {
         ESP_LOGD(TAG, "Header: %s: %s", evt->header_key, evt->header_value);
-        self->last_headers_[evt->header_key] = evt->header_value;
+        // Only store headers we actually use to avoid heap fragmentation
+        if (strcmp(evt->header_key, "Set-Cookie") == 0 || 
+            strcmp(evt->header_key, "Location") == 0) {
+          self->last_headers_[evt->header_key] = evt->header_value;
+        }
       }
       break;
     case HTTP_EVENT_ON_CONNECTED:
@@ -403,6 +408,13 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t* evt) {
 
           size_t to_copy = evt->data_len;
           if (to_copy > remaining) to_copy = remaining;
+
+          // Check heap before append to prevent OOM crash
+          size_t free_heap = esp_get_free_heap_size();
+          if (free_heap < 8192) {
+            ESP_LOGW(TAG, "Low heap (%u bytes), skipping response body collection", free_heap);
+            break;
+          }
 
           resp->append(static_cast<const char*>(evt->data), to_copy);
         } else if (buf && len) {
