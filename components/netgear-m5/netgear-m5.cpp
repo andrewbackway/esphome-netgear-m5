@@ -9,7 +9,7 @@ namespace esphome {
 namespace netgear_m5 {
 
 static const char* const TAG = "netgear_m5";
-static constexpr size_t MAX_HTTP_BODY = 16 * 1024;  // 16 KB cap per response
+static constexpr size_t MAX_HTTP_BODY = 4 * 1024;  // 4 KB cap for login/cookie responses
 
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
@@ -109,7 +109,7 @@ void NetgearM5Component::task_loop_() {
 }
 
 bool NetgearM5Component::fetch_once_(std::string& body) {
-  ESP_LOGD(TAG, "Fetching data from Netgear M5");
+  ESP_LOGD(TAG, "Fetching data from Netgear M5 (free heap: %u bytes)", esp_get_free_heap_size());
   if (cookie_.empty()) {
     esp_err_t first_err = this->_request(
         "http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=", HTTP_METHOD_GET,
@@ -191,9 +191,8 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
   esp_err_t err = ESP_FAIL;
   std::string current_url = url;
 
-  // Bound and pre-reserve the response buffer for this request chain
+  // Clear response but don't pre-reserve - these are small responses (login/cookie)
   response.clear();
-  response.reserve(MAX_HTTP_BODY);
 
   while (true) {
     ESP_LOGD(TAG, "Preparing HTTP request: %s", current_url.c_str());
