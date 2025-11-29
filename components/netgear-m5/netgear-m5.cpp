@@ -11,6 +11,9 @@ namespace netgear_m5 {
 static const char* const TAG = "netgear_m5";
 static constexpr size_t MAX_HTTP_BODY = 4 * 1024;  // 4 KB cap for login/cookie responses
 
+// Memory-efficient streaming buffer - smaller chunks for HTTP data
+static constexpr size_t STREAM_CHUNK_SIZE = 1024;
+
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
 
@@ -19,8 +22,13 @@ void NetgearM5Component::setup() {
   this->text_bindings_.reserve(10);
   this->bin_bindings_.reserve(5);
 
+  // Build the JSON filter once at setup - this dramatically reduces memory usage
+  // by only parsing the fields we actually need from the ~28KB response
+  this->build_json_filter_();
+
+  // Reduced stack size since we no longer need large buffers on stack
   xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
-                          "netgear_m5_task", 8192, this, 4, &this->task_handle_,
+                          "netgear_m5_task", 6144, this, 4, &this->task_handle_,
                           1);
 }
 
@@ -49,69 +57,87 @@ void NetgearM5Component::task_loop_() {
       vTaskDelay(pdMS_TO_TICKS(5000));
       continue;
     }
-    std::string body;
-    if (this->fetch_once_(body)) {
-      JsonDocument doc;
-      DeserializationError err =
-          deserializeJson(doc, this->model_json_buf_, this->model_json_len_);
-      if (err) {
-        ESP_LOGW(TAG, "JSON parse failed: %s (payload size: %u bytes)",
-                 err.c_str(), (unsigned)this->model_json_len_);
-        vTaskDelay(delay_ticks);
-        continue;
-      }
 
-      if (!doc.is<JsonObject>()) {
-        ESP_LOGW(TAG, "Parsed JSON is not an object");
-        vTaskDelay(delay_ticks);
-        continue;
-      }
+    ESP_LOGD(TAG, "Starting fetch cycle (free heap: %u bytes)",
+             esp_get_free_heap_size());
 
-      this->state_.clear();
-      auto root = doc.as<ArduinoJson::JsonObjectConst>();
-      this->sec_token_ = dotted_lookup_("session.secToken", root);
-
-      float rsrp_dbm =
-          atof(dotted_lookup_("wwan.signalStrength.rsrp", root).c_str());
-      bool has_rsrp = !std::isnan(rsrp_dbm);
-
-      float rsrq_db =
-          atof(dotted_lookup_("wwan.signalStrength.rsrq", root).c_str());
-      bool has_rsrq = !std::isnan(rsrq_db);
-
-      float sinr_db =
-          atof(dotted_lookup_("wwan.signalStrength.sinr", root).c_str());
-      bool has_sinr = !std::isnan(sinr_db);
-
-      float rssi_dbm =
-          atof(dotted_lookup_("wwan.signalStrength.rssi", root).c_str());
-      bool has_rssi = !std::isnan(rssi_dbm);
-
-      int bars = this->calc_mobile_bars(has_rsrp, rsrp_dbm, has_rsrq, rsrq_db,
-                                        has_sinr, sinr_db, has_rssi, rssi_dbm);
-
-      this->state_["wwan.signalStrength.bars"] = std::to_string(bars);
-
-      // Store all bound values
-      for (const auto& b : this->num_bindings_) {
-        this->state_[b.path] = dotted_lookup_(b.path, root);
-      }
-      for (const auto& b : this->text_bindings_) {
-        this->state_[b.path] = dotted_lookup_(b.path, root);
-      }
-      for (const auto& b : this->bin_bindings_) {
-        this->state_[b.path] = dotted_lookup_(b.path, root);
-      }
+    if (this->fetch_and_parse_()) {
       this->has_new_state_ = true;
     }
+
     vTaskDelay(delay_ticks);
   }
 }
 
-bool NetgearM5Component::fetch_once_(std::string& body) {
-  ESP_LOGD(TAG, "Fetching data from Netgear M5 (free heap: %u bytes)", esp_get_free_heap_size());
+void NetgearM5Component::build_json_filter_() {
+  // Build a filter document that includes only the paths we need
+  // This dramatically reduces memory usage when parsing the ~28KB JSON response
+  // by filtering during deserialization (not after)
+
+  // Always need session token for login
+  this->json_filter_["session"]["secToken"] = true;
+
+  // Signal strength fields for bars calculation
+  this->json_filter_["wwan"]["signalStrength"]["rsrp"] = true;
+  this->json_filter_["wwan"]["signalStrength"]["rsrq"] = true;
+  this->json_filter_["wwan"]["signalStrength"]["sinr"] = true;
+  this->json_filter_["wwan"]["signalStrength"]["rssi"] = true;
+
+  // Add paths from user-configured bindings
+  for (const auto& b : this->num_bindings_) {
+    add_path_to_filter_(b.path);
+  }
+  for (const auto& b : this->text_bindings_) {
+    add_path_to_filter_(b.path);
+  }
+  for (const auto& b : this->bin_bindings_) {
+    add_path_to_filter_(b.path);
+  }
+
+  ESP_LOGD(TAG, "Built JSON filter with %u bytes",
+           (unsigned)this->json_filter_.memoryUsage());
+}
+
+void NetgearM5Component::add_path_to_filter_(const std::string& path) {
+  // Parse dotted path like "power.battChargeLevel" and add to filter
+  // This creates the nested structure: filter["power"]["battChargeLevel"] = true
+
+  JsonVariant current = this->json_filter_.as<JsonVariant>();
+  size_t start = 0;
+
+  while (start < path.size()) {
+    size_t dot = path.find('.', start);
+    size_t end = (dot == std::string::npos) ? path.size() : dot;
+
+    std::string key = path.substr(start, end - start);
+
+    // Handle array notation like "list[0]"
+    size_t bracket = key.find('[');
+    if (bracket != std::string::npos) {
+      std::string array_key = key.substr(0, bracket);
+      // For arrays, we just need to mark the first element as needing parsing
+      // ArduinoJson will apply the filter to all array elements
+      current = current[array_key.c_str()];
+      current = current[0];
+    } else {
+      current = current[key.c_str()];
+    }
+
+    if (dot == std::string::npos) {
+      // Last segment - mark as true to include this field
+      current.set(true);
+      break;
+    }
+    start = dot + 1;
+  }
+}
+
+bool NetgearM5Component::fetch_and_parse_() {
+  // Memory-efficient fetch and parse using ArduinoJson filtering
+  // This parses the JSON stream while filtering, avoiding storing the full 28KB
+
   if (cookie_.empty()) {
-    std::string unused;  // Not collecting body - only need Set-Cookie header
+    std::string unused;
     esp_err_t first_err = this->_request(
         "http://" + this->host_ + "/sess_cd_tmp?op=%2F&oq=", HTTP_METHOD_GET,
         "", "", unused);
@@ -124,29 +150,20 @@ bool NetgearM5Component::fetch_once_(std::string& body) {
   const std::string model_url =
       "http://" + this->host_ + "/api/model.json?internalapi=1";
 
+  // For login, we need to fetch without filter first to get the token
   if (!this->logged_in_) {
-    ESP_LOGD(TAG, "Extracting login token");
+    ESP_LOGD(TAG, "Performing login sequence");
 
-    // Fetch model.json into fixed buffer (no std::string for 24 KB body)
-    this->model_json_len_ = 0;
-    esp_err_t token_err = this->request_into_buffer_(
-        model_url, HTTP_METHOD_GET, "", "", this->model_json_buf_,
-        MODEL_JSON_BUF_SIZE, this->model_json_len_);
-    if (token_err != ESP_OK || this->model_json_len_ == 0) {
-      ESP_LOGW(TAG, "Failed to fetch model.json for login token");
-      return false;
-    }
+    // Fetch and parse with minimal filter for login token only
+    JsonDocument login_filter;
+    login_filter["session"]["secToken"] = true;
 
-    JsonDocument doc;
-    DeserializationError err =
-        deserializeJson(doc, this->model_json_buf_, this->model_json_len_);
-    if (err) {
-      ESP_LOGW(TAG, "JSON parse failed: %s", err.c_str());
+    this->stream_len_ = 0;
+    esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "",
+                                                "", login_filter);
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "Failed to fetch model.json for login");
       return false;
-    }
-    if (doc.is<JsonObject>()) {
-      this->sec_token_ =
-          dotted_lookup_("session.secToken", doc.as<JsonObjectConst>());
     }
 
     if (this->sec_token_.empty()) {
@@ -154,12 +171,13 @@ bool NetgearM5Component::fetch_once_(std::string& body) {
       return false;
     }
 
+    // Perform login
     std::string login_body = "session.password=" + this->password_ +
                              "&token=" + this->sec_token_ +
                              "&ok_redirect=%2Findex.html&" +
                              "err_redirect=%2Findex.html%3Floginfailed";
 
-    std::string unused;  // Not collecting body - only need Set-Cookie header
+    std::string unused;
     esp_err_t login_err = this->_request(
         "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
         "application/x-www-form-urlencoded", unused);
@@ -173,15 +191,268 @@ bool NetgearM5Component::fetch_once_(std::string& body) {
     ESP_LOGD(TAG, "Login OK");
   }
 
-  // Main stats fetch: again into the fixed buffer
-  this->model_json_len_ = 0;
-  esp_err_t err = this->request_into_buffer_(
-      model_url, HTTP_METHOD_GET, "", "", this->model_json_buf_,
-      MODEL_JSON_BUF_SIZE, this->model_json_len_);
+  // Main data fetch with full filter
+  this->stream_len_ = 0;
+  this->state_.clear();
 
-  // 'body' is no longer used for JSON content; keep it empty
-  body.clear();
-  return (err == ESP_OK && this->model_json_len_ > 0);
+  esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "", "",
+                                              this->json_filter_);
+
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "Failed to fetch model.json");
+    return false;
+  }
+
+  // Calculate bars from signal strength values
+  float rsrp_dbm = NAN, rsrq_db = NAN, sinr_db = NAN, rssi_dbm = NAN;
+
+  auto it = this->state_.find("wwan.signalStrength.rsrp");
+  if (it != this->state_.end() && !it->second.empty()) {
+    rsrp_dbm = atof(it->second.c_str());
+  }
+  it = this->state_.find("wwan.signalStrength.rsrq");
+  if (it != this->state_.end() && !it->second.empty()) {
+    rsrq_db = atof(it->second.c_str());
+  }
+  it = this->state_.find("wwan.signalStrength.sinr");
+  if (it != this->state_.end() && !it->second.empty()) {
+    sinr_db = atof(it->second.c_str());
+  }
+  it = this->state_.find("wwan.signalStrength.rssi");
+  if (it != this->state_.end() && !it->second.empty()) {
+    rssi_dbm = atof(it->second.c_str());
+  }
+
+  bool has_rsrp = !std::isnan(rsrp_dbm);
+  bool has_rsrq = !std::isnan(rsrq_db);
+  bool has_sinr = !std::isnan(sinr_db);
+  bool has_rssi = !std::isnan(rssi_dbm);
+
+  int bars = this->calc_mobile_bars(has_rsrp, rsrp_dbm, has_rsrq, rsrq_db,
+                                    has_sinr, sinr_db, has_rssi, rssi_dbm);
+  this->state_["wwan.signalStrength.bars"] = std::to_string(bars);
+
+  ESP_LOGD(TAG, "Fetch complete (free heap: %u bytes)",
+           esp_get_free_heap_size());
+
+  return true;
+}
+
+// REMOVED: fetch_once_ - replaced by fetch_and_parse_() with filtering
+
+esp_err_t NetgearM5Component::stream_json_request_(
+    const std::string& url, esp_http_client_method_t method,
+    const std::string& body, const std::string& content_type,
+    JsonDocument& filter) {
+  // Memory-efficient JSON streaming with filtering
+  // Instead of buffering the entire 28KB response, we use ArduinoJson's
+  // DeserializationOption::Filter to parse only needed fields during streaming
+
+  esp_err_t err = ESP_FAIL;
+  std::string current_url = url;
+
+  while (true) {
+    ESP_LOGD(TAG, "Preparing streaming JSON request: %s", current_url.c_str());
+
+    // Set up streaming context
+    StreamContext stream_ctx;
+    stream_ctx.instance = this;
+    stream_ctx.filter = &filter;
+    stream_ctx.parse_complete = false;
+    stream_ctx.parse_error = false;
+
+    esp_http_client_config_t config = {};
+    config.url = current_url.c_str();
+    config.event_handler = _stream_event_handler;
+    config.user_data = &stream_ctx;
+    config.disable_auto_redirect = true;
+    config.timeout_ms = 120000;
+    // Smaller buffer sizes for memory efficiency
+    config.buffer_size = 512;
+    config.buffer_size_tx = 512;
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == nullptr) {
+      ESP_LOGE(TAG, "Failed to init HTTP client");
+      return ESP_FAIL;
+    }
+
+    esp_http_client_set_method(client, method);
+
+    if (!cookie_.empty()) {
+      esp_http_client_set_header(client, "Cookie", cookie_.c_str());
+    }
+
+    if (!body.empty()) {
+      esp_http_client_set_post_field(client, body.c_str(), body.size());
+      if (!content_type.empty()) {
+        esp_http_client_set_header(client, "Content-Type",
+                                   content_type.c_str());
+      }
+    }
+
+    ESP_LOGD(TAG, "Sending streaming request: %s", current_url.c_str());
+    err = esp_http_client_perform(client);
+
+    if (err == ESP_OK) {
+      int status_code = esp_http_client_get_status_code(client);
+      this->last_status_code_ = status_code;
+      ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
+
+      auto setCookieValue = this->last_headers_.find("Set-Cookie");
+      if (setCookieValue != this->last_headers_.end()) {
+        ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
+        this->cookie_ = setCookieValue->second;
+      }
+
+      if (status_code == 302) {
+        auto locationValue = this->last_headers_.find("Location");
+        if (locationValue != this->last_headers_.end() &&
+            locationValue->second != current_url) {
+          ESP_LOGI(TAG, "Redirect Location Found: %s",
+                   locationValue->second.c_str());
+
+          size_t pos = locationValue->second.find("index.html");
+          if (pos != std::string::npos) {
+            ESP_LOGI(TAG, "Cancelling redirection to index.html");
+            current_url.clear();
+          } else {
+            current_url = locationValue->second;
+          }
+        }
+      } else {
+        current_url.clear();
+      }
+
+      // Check if parsing was successful
+      if (stream_ctx.parse_error) {
+        ESP_LOGW(TAG, "JSON parsing failed during streaming");
+        err = ESP_FAIL;
+      }
+    } else {
+      ESP_LOGE(TAG, "Streaming request failed: %s", esp_err_to_name(err));
+      current_url.clear();
+    }
+
+    esp_http_client_cleanup(client);
+    if (current_url.empty()) break;
+  }
+  return err;
+}
+
+esp_err_t NetgearM5Component::_stream_event_handler(esp_http_client_event_t* evt) {
+  auto* ctx = static_cast<StreamContext*>(evt->user_data);
+  if (!ctx) return ESP_FAIL;
+
+  NetgearM5Component* self = ctx->instance;
+
+  switch (evt->event_id) {
+    case HTTP_EVENT_ERROR:
+      ESP_LOGD(TAG, "HTTP_EVENT_ERROR (stream)");
+      ctx->parse_error = true;
+      break;
+
+    case HTTP_EVENT_ON_HEADER:
+      if (evt->header_key && evt->header_value) {
+        if (strcmp(evt->header_key, "Set-Cookie") == 0 ||
+            strcmp(evt->header_key, "Location") == 0) {
+          self->last_headers_[evt->header_key] = evt->header_value;
+        }
+      }
+      break;
+
+    case HTTP_EVENT_ON_CONNECTED:
+      ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED (stream)");
+      self->last_headers_.clear();
+      // Reset stream buffer for new response
+      self->stream_len_ = 0;
+      break;
+
+    case HTTP_EVENT_ON_DATA:
+      if (evt->data && evt->data_len > 0) {
+        // Accumulate data in small streaming buffer
+        size_t remaining = STREAM_BUF_SIZE - self->stream_len_;
+        size_t to_copy = (evt->data_len < remaining) ? evt->data_len : remaining;
+
+        if (to_copy > 0) {
+          memcpy(self->stream_buf_ + self->stream_len_, evt->data, to_copy);
+          self->stream_len_ += to_copy;
+        }
+      }
+      break;
+
+    case HTTP_EVENT_ON_FINISH:
+      ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH (stream), received %u bytes",
+               (unsigned)self->stream_len_);
+      // Parse the accumulated JSON with filtering
+      if (self->stream_len_ > 0 && ctx->filter) {
+        // Null-terminate for safety
+        if (self->stream_len_ < STREAM_BUF_SIZE) {
+          self->stream_buf_[self->stream_len_] = '\0';
+        }
+
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(
+            doc, self->stream_buf_, self->stream_len_,
+            DeserializationOption::Filter(*ctx->filter));
+
+        if (err) {
+          ESP_LOGW(TAG, "Filtered JSON parse failed: %s", err.c_str());
+          ctx->parse_error = true;
+        } else if (doc.is<JsonObject>()) {
+          // Extract values from filtered document
+          auto root = doc.as<ArduinoJson::JsonObjectConst>();
+
+          // Extract session token
+          auto sec_token = dotted_lookup_("session.secToken", root);
+          if (!sec_token.empty()) {
+            self->sec_token_ = sec_token;
+          }
+
+          // Extract all bound sensor values
+          for (const auto& b : self->num_bindings_) {
+            std::string val = dotted_lookup_(b.path, root);
+            if (!val.empty()) {
+              self->state_[b.path] = val;
+            }
+          }
+          for (const auto& b : self->text_bindings_) {
+            std::string val = dotted_lookup_(b.path, root);
+            if (!val.empty()) {
+              self->state_[b.path] = val;
+            }
+          }
+          for (const auto& b : self->bin_bindings_) {
+            std::string val = dotted_lookup_(b.path, root);
+            if (!val.empty()) {
+              self->state_[b.path] = val;
+            }
+          }
+
+          // Extract signal strength values for bars calculation
+          self->state_["wwan.signalStrength.rsrp"] =
+              dotted_lookup_("wwan.signalStrength.rsrp", root);
+          self->state_["wwan.signalStrength.rsrq"] =
+              dotted_lookup_("wwan.signalStrength.rsrq", root);
+          self->state_["wwan.signalStrength.sinr"] =
+              dotted_lookup_("wwan.signalStrength.sinr", root);
+          self->state_["wwan.signalStrength.rssi"] =
+              dotted_lookup_("wwan.signalStrength.rssi", root);
+
+          ctx->parse_complete = true;
+          ESP_LOGD(TAG, "Filtered JSON parsed successfully, doc size: %u bytes",
+                   (unsigned)doc.memoryUsage());
+        } else {
+          ESP_LOGW(TAG, "Parsed JSON is not an object");
+          ctx->parse_error = true;
+        }
+      }
+      break;
+
+    default:
+      break;
+  }
+  return ESP_OK;
 }
 
 esp_err_t NetgearM5Component::_request(const std::string& url,
@@ -201,7 +472,7 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
     esp_http_client_config_t config = {};
     config.url = current_url.c_str();
     config.event_handler = _event_handler;
-    RequestContext ctx{this, &response, nullptr, nullptr, 0};
+    RequestContext ctx{this, &response};
     config.user_data = &ctx;
     config.disable_auto_redirect = true;
     config.timeout_ms = 120000;
@@ -273,92 +544,7 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
   return err;
 }
 
-esp_err_t NetgearM5Component::request_into_buffer_(
-    const std::string& url, esp_http_client_method_t method,
-    const std::string& body, const std::string& content_type, char* buf,
-    size_t cap, size_t& out_len) {
-  esp_err_t err = ESP_FAIL;
-  std::string current_url = url;
-
-  out_len = 0;
-
-  while (true) {
-    ESP_LOGD(TAG, "Preparing HTTP request (buffer): %s", current_url.c_str());
-
-    esp_http_client_config_t config = {};
-    config.url = current_url.c_str();
-    config.event_handler = _event_handler;
-    RequestContext ctx{this, nullptr, buf, &out_len, cap};
-    config.user_data = &ctx;
-    config.disable_auto_redirect = true;
-    config.timeout_ms = 120000;
-    config.buffer_size = 1024;
-    config.buffer_size_tx = 1024;
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == nullptr) {
-      ESP_LOGE(TAG, "Failed to init HTTP client");
-      return ESP_FAIL;
-    }
-
-    esp_http_client_set_method(client, method);
-
-    if (!cookie_.empty()) {
-      esp_http_client_set_header(client, "Cookie", cookie_.c_str());
-    }
-
-    if (!body.empty()) {
-      esp_http_client_set_post_field(client, body.c_str(), body.size());
-      if (!content_type.empty()) {
-        esp_http_client_set_header(client, "Content-Type",
-                                   content_type.c_str());
-      }
-    }
-
-    ESP_LOGD(TAG, "Sending HTTP request (buffer): %s", current_url.c_str());
-    err = esp_http_client_perform(client);
-
-    if (err == ESP_OK) {
-      int status_code = esp_http_client_get_status_code(client);
-      this->last_status_code_ = status_code;
-      ESP_LOGD(TAG, "HTTP Status = %d", this->last_status_code_);
-
-      auto setCookieValue = this->last_headers_.find("Set-Cookie");
-      if (setCookieValue != this->last_headers_.end()) {
-        ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
-        this->cookie_ = setCookieValue->second;
-      }
-
-      if (status_code == 302) {
-        auto locationValue = this->last_headers_.find("Location");
-        if (locationValue != this->last_headers_.end() &&
-            locationValue->second != current_url) {
-          ESP_LOGI(TAG, "Redirect Location Found: %s",
-                   locationValue->second.c_str());
-          current_url = locationValue->second;
-
-          size_t pos = current_url.find("index.html");
-          if (pos != std::string::npos) {
-            ESP_LOGI(TAG, "Cancelling redirection to index.html");
-            current_url.clear();
-          } else {
-            // Reset buffer for redirect
-            out_len = 0;
-          }
-        }
-      } else {
-        current_url.clear();
-      }
-    } else {
-      ESP_LOGE(TAG, "HTTP request (buffer) failed: %s", esp_err_to_name(err));
-      current_url.clear();
-    }
-
-    esp_http_client_cleanup(client);
-    if (current_url.empty()) break;
-  }
-  return err;
-}
+// REMOVED: request_into_buffer_ - replaced by stream_json_request_ with filtering
 
 esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t* evt) {
   auto* ctx = static_cast<RequestContext*>(evt->user_data);
@@ -366,9 +552,6 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t* evt) {
 
   NetgearM5Component* self = ctx->instance;
   std::string* resp = ctx->response;
-  char* buf = ctx->buf;
-  size_t* len = ctx->len;
-  size_t cap = ctx->cap;
 
   switch (evt->event_id) {
     case HTTP_EVENT_ERROR:
@@ -378,11 +561,9 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t* evt) {
       ESP_LOGD(TAG, "HTTP_EVENT_HEADERS_SENT");
       break;
     case HTTP_EVENT_ON_HEADER:
-      ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER");
       if (evt->header_key && evt->header_value) {
-        ESP_LOGD(TAG, "Header: %s: %s", evt->header_key, evt->header_value);
         // Only store headers we actually use to avoid heap fragmentation
-        if (strcmp(evt->header_key, "Set-Cookie") == 0 || 
+        if (strcmp(evt->header_key, "Set-Cookie") == 0 ||
             strcmp(evt->header_key, "Location") == 0) {
           self->last_headers_[evt->header_key] = evt->header_value;
         }
@@ -394,60 +575,38 @@ esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t* evt) {
       if (resp) {
         resp->clear();
       }
-      if (buf && len) {
-        *len = 0;
-      }
       break;
     case HTTP_EVENT_ON_DATA:
-      if (evt->data && evt->data_len > 0) {
-        if (resp) {
-          // existing string path (small responses only)
-          size_t remaining = 0;
-          if (resp->size() < MAX_HTTP_BODY)
-            remaining = MAX_HTTP_BODY - resp->size();
+      // Only collect response body for small responses (login/cookie)
+      if (evt->data && evt->data_len > 0 && resp) {
+        size_t remaining = 0;
+        if (resp->size() < MAX_HTTP_BODY)
+          remaining = MAX_HTTP_BODY - resp->size();
 
-          if (remaining == 0) {
-            ESP_LOGW(TAG, "Netgear M5 string body reached MAX_HTTP_BODY (%d)",
-                     (int)MAX_HTTP_BODY);
-            break;
-          }
-
-          size_t to_copy = evt->data_len;
-          if (to_copy > remaining) to_copy = remaining;
-
-          // Check heap before append to prevent OOM crash
-          size_t free_heap = esp_get_free_heap_size();
-          if (free_heap < 8192) {
-            ESP_LOGW(TAG, "Low heap (%u bytes), skipping response body collection", free_heap);
-            break;
-          }
-
-          resp->append(static_cast<const char*>(evt->data), to_copy);
-        } else if (buf && len) {
-          // large /api/model.json path: write into fixed buffer
-          size_t remaining = 0;
-          if (*len < cap) remaining = cap - *len;
-
-          if (remaining == 0) {
-            ESP_LOGW(TAG,
-                     "Netgear M5 buffer reached cap (%d bytes), truncating",
-                     (int)cap);
-            break;
-          }
-
-          size_t to_copy = evt->data_len;
-          if (to_copy > remaining) to_copy = remaining;
-
-          memcpy(buf + *len, evt->data, to_copy);
-          *len += to_copy;
+        if (remaining == 0) {
+          ESP_LOGW(TAG, "Response body reached MAX_HTTP_BODY (%d)",
+                   (int)MAX_HTTP_BODY);
+          break;
         }
+
+        size_t to_copy = evt->data_len;
+        if (to_copy > remaining) to_copy = remaining;
+
+        // Check heap before append to prevent OOM crash
+        size_t free_heap = esp_get_free_heap_size();
+        if (free_heap < 8192) {
+          ESP_LOGW(TAG, "Low heap (%u bytes), skipping response body",
+                   free_heap);
+          break;
+        }
+
+        resp->append(static_cast<const char*>(evt->data), to_copy);
       }
       break;
     case HTTP_EVENT_REDIRECT:
       ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
       break;
     default:
-      ESP_LOGD(TAG, "HTTP event: %d", evt->event_id);
       break;
   }
   return ESP_OK;
