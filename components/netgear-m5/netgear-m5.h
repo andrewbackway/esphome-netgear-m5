@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include <ArduinoJson.h>
 #include "esp_http_client.h"
 #include "esphome.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
@@ -41,6 +42,7 @@ class NetgearM5Component : public Component {
   const std::string &cookie() const { return cookie_; }
 
  protected:
+  // Signal strength calculation helpers
   int clamp01(int v, int lo, int hi);
   int bars_from_rsrp(float rsrp_dbm);
   int quality_adjust_from_rsrq(float rsrq_db);
@@ -50,34 +52,56 @@ class NetgearM5Component : public Component {
                        float rsrq_db, bool has_sinr, float sinr_db,
                        bool has_rssi, float rssi_dbm);
 
+  // Dynamic buffer for JSON responses - allocated only during fetch
+  // This avoids permanently consuming 32KB of RAM
+  static constexpr size_t STREAM_BUF_SIZE = 32 * 1024;  // 32KB for full JSON
+  char* stream_buf_{nullptr};  // Dynamically allocated during fetch
+  size_t stream_len_{0};
 
-    // Buffer for large /api/model.json responses (~24 KB)
-  static constexpr size_t MODEL_JSON_BUF_SIZE = 32 * 1024;
-  char model_json_buf_[MODEL_JSON_BUF_SIZE];
-  size_t model_json_len_{0};
+  // JSON filter document - built once at setup, used for all parses
+  // This filters the ~28KB JSON down to only the fields we need
+  JsonDocument json_filter_;
 
   int last_status_code_ = 0;
   std::map<std::string, std::string> last_headers_;
   bool logged_in_ = false;
+
+  // Task management
   static void task_trampoline_(void *param);
   void task_loop_();
-  bool fetch_once_(std::string &body);
-  static bool extract_http_body_(const std::string &raw, std::string &body_out);
+
+  // JSON filter building
+  void build_json_filter_();
+  void add_path_to_filter_(const std::string &path);
+
+  // Memory-efficient fetch and parse with filtering
+  bool fetch_and_parse_();
+
+  // Helper to extract signal strength values from state map
+  float extract_signal_value_(const std::string &key);
+
+  // JSON path lookup helper
   static std::string dotted_lookup_(
       const std::string &path, const ::ArduinoJson::JsonVariantConst &root);
+
+  // Sensor value publishing
   void publish_pending_();
 
+  // HTTP request for small responses (login, cookies)
   esp_err_t _request(const std::string &url, esp_http_client_method_t method,
                      const std::string &body, const std::string &content_type,
                      std::string &response);
 
-  esp_err_t request_into_buffer_(const std::string &url,
-            esp_http_client_method_t method,
-            const std::string &body,
-            const std::string &content_type,
-            char *buf, size_t cap, size_t &out_len);
+  // Memory-efficient streaming JSON request with filtering
+  esp_err_t stream_json_request_(const std::string &url,
+                                  esp_http_client_method_t method,
+                                  const std::string &body,
+                                  const std::string &content_type,
+                                  JsonDocument &filter);
 
+  // Event handlers for HTTP client
   static esp_err_t _event_handler(esp_http_client_event_t *evt);
+  static esp_err_t _stream_event_handler(esp_http_client_event_t *evt);
 
   std::string sec_token_;
   std::string host_;
@@ -109,13 +133,20 @@ class NetgearM5Component : public Component {
   std::vector<TextBinding> text_bindings_;
   std::vector<BinBinding> bin_bindings_;
 
- struct RequestContext {
+  // Context for small HTTP requests (login, cookies)
+  struct RequestContext {
     NetgearM5Component *instance;
-    std::string *response;  // used for small responses
-    char *buf;              // used for large responses (model.json)
-    size_t *len;            // current length when using buf
-    size_t cap;             // capacity of buf
+    std::string *response;
+  };
+
+  // Context for streaming JSON requests with filtering
+  struct StreamContext {
+    NetgearM5Component *instance;
+    JsonDocument *filter;
+    bool parse_complete;
+    bool parse_error;
   };
 };
+
 }  // namespace netgear_m5
 }  // namespace esphome
