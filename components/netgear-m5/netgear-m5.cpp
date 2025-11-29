@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 
 namespace esphome {
@@ -134,6 +135,15 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
   }
 }
 
+float NetgearM5Component::extract_signal_value_(const std::string& key) {
+  // Helper to extract signal strength values from state map
+  auto it = this->state_.find(key);
+  if (it != this->state_.end() && !it->second.empty()) {
+    return static_cast<float>(atof(it->second.c_str()));
+  }
+  return std::numeric_limits<float>::quiet_NaN();
+}
+
 bool NetgearM5Component::fetch_and_parse_() {
   // Memory-efficient fetch and parse using ArduinoJson filtering
   // Dynamically allocate buffer only during fetch to avoid permanent RAM usage
@@ -219,25 +229,11 @@ bool NetgearM5Component::fetch_and_parse_() {
       goto cleanup;
     }
 
-    // Calculate bars from signal strength values
-    float rsrp_dbm = NAN, rsrq_db = NAN, sinr_db = NAN, rssi_dbm = NAN;
-
-    auto it = this->state_.find("wwan.signalStrength.rsrp");
-    if (it != this->state_.end() && !it->second.empty()) {
-      rsrp_dbm = atof(it->second.c_str());
-    }
-    it = this->state_.find("wwan.signalStrength.rsrq");
-    if (it != this->state_.end() && !it->second.empty()) {
-      rsrq_db = atof(it->second.c_str());
-    }
-    it = this->state_.find("wwan.signalStrength.sinr");
-    if (it != this->state_.end() && !it->second.empty()) {
-      sinr_db = atof(it->second.c_str());
-    }
-    it = this->state_.find("wwan.signalStrength.rssi");
-    if (it != this->state_.end() && !it->second.empty()) {
-      rssi_dbm = atof(it->second.c_str());
-    }
+    // Calculate bars from signal strength values using helper function
+    float rsrp_dbm = extract_signal_value_("wwan.signalStrength.rsrp");
+    float rsrq_db = extract_signal_value_("wwan.signalStrength.rsrq");
+    float sinr_db = extract_signal_value_("wwan.signalStrength.sinr");
+    float rssi_dbm = extract_signal_value_("wwan.signalStrength.rssi");
 
     bool has_rsrp = !std::isnan(rsrp_dbm);
     bool has_rsrq = !std::isnan(rsrq_db);
@@ -411,7 +407,8 @@ esp_err_t NetgearM5Component::_stream_event_handler(esp_http_client_event_t* evt
                (unsigned)self->stream_len_);
       // Parse the accumulated JSON with filtering
       if (self->stream_len_ > 0 && ctx->filter) {
-        // Null-terminate for safety
+        // Note: deserializeJson uses the explicit length, so null-termination
+        // is optional. We add it when possible for debugging convenience.
         if (self->stream_len_ < STREAM_BUF_SIZE) {
           self->stream_buf_[self->stream_len_] = '\0';
         }

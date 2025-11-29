@@ -77,6 +77,9 @@ class NetgearM5Component : public Component {
   // Memory-efficient fetch and parse with filtering
   bool fetch_and_parse_();
 
+  // Helper to extract signal strength values from state map
+  float extract_signal_value_(const std::string &key);
+
   // JSON path lookup helper
   static std::string dotted_lookup_(
       const std::string &path, const ::ArduinoJson::JsonVariantConst &root);
