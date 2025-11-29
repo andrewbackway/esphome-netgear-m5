@@ -52,10 +52,10 @@ class NetgearM5Component : public Component {
                        float rsrq_db, bool has_sinr, float sinr_db,
                        bool has_rssi, float rssi_dbm);
 
-  // Memory-optimized streaming buffer for JSON responses
-  // Much smaller than the old 32KB buffer - we use filtering during parse
+  // Dynamic buffer for JSON responses - allocated only during fetch
+  // This avoids permanently consuming 32KB of RAM
   static constexpr size_t STREAM_BUF_SIZE = 32 * 1024;  // 32KB for full JSON
-  char stream_buf_[STREAM_BUF_SIZE];
+  char* stream_buf_{nullptr};  // Dynamically allocated during fetch
   size_t stream_len_{0};
 
   // JSON filter document - built once at setup, used for all parses

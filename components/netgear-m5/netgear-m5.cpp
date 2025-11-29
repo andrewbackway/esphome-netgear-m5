@@ -2,6 +2,8 @@
 
 #include <ArduinoJson.h>
 
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -134,7 +136,20 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
 
 bool NetgearM5Component::fetch_and_parse_() {
   // Memory-efficient fetch and parse using ArduinoJson filtering
-  // This parses the JSON stream while filtering, avoiding storing the full 28KB
+  // Dynamically allocate buffer only during fetch to avoid permanent RAM usage
+
+  // Allocate buffer at start of fetch
+  if (this->stream_buf_ == nullptr) {
+    this->stream_buf_ = static_cast<char*>(malloc(STREAM_BUF_SIZE));
+    if (this->stream_buf_ == nullptr) {
+      ESP_LOGE(TAG, "Failed to allocate stream buffer (free heap: %u bytes)",
+               esp_get_free_heap_size());
+      return false;
+    }
+    ESP_LOGD(TAG, "Allocated %u byte stream buffer", (unsigned)STREAM_BUF_SIZE);
+  }
+
+  bool success = false;
 
   if (cookie_.empty()) {
     std::string unused;
@@ -143,99 +158,109 @@ bool NetgearM5Component::fetch_and_parse_() {
         "", "", unused);
     if (first_err != ESP_OK || cookie_.empty()) {
       ESP_LOGE(TAG, "Unable to obtain first cookie");
-      return false;
+      goto cleanup;
     }
   }
 
-  const std::string model_url =
-      "http://" + this->host_ + "/api/model.json?internalapi=1";
+  {
+    const std::string model_url =
+        "http://" + this->host_ + "/api/model.json?internalapi=1";
 
-  // For login, we need to fetch without filter first to get the token
-  if (!this->logged_in_) {
-    ESP_LOGD(TAG, "Performing login sequence");
+    // For login, we need to fetch without filter first to get the token
+    if (!this->logged_in_) {
+      ESP_LOGD(TAG, "Performing login sequence");
 
-    // Fetch and parse with minimal filter for login token only
-    JsonDocument login_filter;
-    login_filter["session"]["secToken"] = true;
+      // Fetch and parse with minimal filter for login token only
+      JsonDocument login_filter;
+      login_filter["session"]["secToken"] = true;
 
+      this->stream_len_ = 0;
+      esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "",
+                                                  "", login_filter);
+      if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to fetch model.json for login");
+        goto cleanup;
+      }
+
+      if (this->sec_token_.empty()) {
+        ESP_LOGE(TAG, "Failed to extract session token");
+        goto cleanup;
+      }
+
+      // Perform login
+      std::string login_body = "session.password=" + this->password_ +
+                               "&token=" + this->sec_token_ +
+                               "&ok_redirect=%2Findex.html&" +
+                               "err_redirect=%2Findex.html%3Floginfailed";
+
+      std::string unused;
+      esp_err_t login_err = this->_request(
+          "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
+          "application/x-www-form-urlencoded", unused);
+
+      if (login_err != ESP_OK) {
+        ESP_LOGE(TAG, "Login failed");
+        goto cleanup;
+      }
+
+      this->logged_in_ = true;
+      ESP_LOGD(TAG, "Login OK");
+    }
+
+    // Main data fetch with full filter
     this->stream_len_ = 0;
-    esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "",
-                                                "", login_filter);
+    this->state_.clear();
+
+    esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "", "",
+                                                this->json_filter_);
+
     if (err != ESP_OK) {
-      ESP_LOGW(TAG, "Failed to fetch model.json for login");
-      return false;
+      ESP_LOGW(TAG, "Failed to fetch model.json");
+      goto cleanup;
     }
 
-    if (this->sec_token_.empty()) {
-      ESP_LOGE(TAG, "Failed to extract session token");
-      return false;
+    // Calculate bars from signal strength values
+    float rsrp_dbm = NAN, rsrq_db = NAN, sinr_db = NAN, rssi_dbm = NAN;
+
+    auto it = this->state_.find("wwan.signalStrength.rsrp");
+    if (it != this->state_.end() && !it->second.empty()) {
+      rsrp_dbm = atof(it->second.c_str());
+    }
+    it = this->state_.find("wwan.signalStrength.rsrq");
+    if (it != this->state_.end() && !it->second.empty()) {
+      rsrq_db = atof(it->second.c_str());
+    }
+    it = this->state_.find("wwan.signalStrength.sinr");
+    if (it != this->state_.end() && !it->second.empty()) {
+      sinr_db = atof(it->second.c_str());
+    }
+    it = this->state_.find("wwan.signalStrength.rssi");
+    if (it != this->state_.end() && !it->second.empty()) {
+      rssi_dbm = atof(it->second.c_str());
     }
 
-    // Perform login
-    std::string login_body = "session.password=" + this->password_ +
-                             "&token=" + this->sec_token_ +
-                             "&ok_redirect=%2Findex.html&" +
-                             "err_redirect=%2Findex.html%3Floginfailed";
+    bool has_rsrp = !std::isnan(rsrp_dbm);
+    bool has_rsrq = !std::isnan(rsrq_db);
+    bool has_sinr = !std::isnan(sinr_db);
+    bool has_rssi = !std::isnan(rssi_dbm);
 
-    std::string unused;
-    esp_err_t login_err = this->_request(
-        "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
-        "application/x-www-form-urlencoded", unused);
+    int bars = this->calc_mobile_bars(has_rsrp, rsrp_dbm, has_rsrq, rsrq_db,
+                                      has_sinr, sinr_db, has_rssi, rssi_dbm);
+    this->state_["wwan.signalStrength.bars"] = std::to_string(bars);
 
-    if (login_err != ESP_OK) {
-      ESP_LOGE(TAG, "Login failed");
-      return false;
-    }
-
-    this->logged_in_ = true;
-    ESP_LOGD(TAG, "Login OK");
+    success = true;
   }
 
-  // Main data fetch with full filter
-  this->stream_len_ = 0;
-  this->state_.clear();
-
-  esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "", "",
-                                              this->json_filter_);
-
-  if (err != ESP_OK) {
-    ESP_LOGW(TAG, "Failed to fetch model.json");
-    return false;
+cleanup:
+  // Free buffer after fetch to release memory
+  if (this->stream_buf_ != nullptr) {
+    free(this->stream_buf_);
+    this->stream_buf_ = nullptr;
+    ESP_LOGD(TAG, "Freed stream buffer (free heap: %u bytes)",
+             esp_get_free_heap_size());
   }
 
-  // Calculate bars from signal strength values
-  float rsrp_dbm = NAN, rsrq_db = NAN, sinr_db = NAN, rssi_dbm = NAN;
-
-  auto it = this->state_.find("wwan.signalStrength.rsrp");
-  if (it != this->state_.end() && !it->second.empty()) {
-    rsrp_dbm = atof(it->second.c_str());
-  }
-  it = this->state_.find("wwan.signalStrength.rsrq");
-  if (it != this->state_.end() && !it->second.empty()) {
-    rsrq_db = atof(it->second.c_str());
-  }
-  it = this->state_.find("wwan.signalStrength.sinr");
-  if (it != this->state_.end() && !it->second.empty()) {
-    sinr_db = atof(it->second.c_str());
-  }
-  it = this->state_.find("wwan.signalStrength.rssi");
-  if (it != this->state_.end() && !it->second.empty()) {
-    rssi_dbm = atof(it->second.c_str());
-  }
-
-  bool has_rsrp = !std::isnan(rsrp_dbm);
-  bool has_rsrq = !std::isnan(rsrq_db);
-  bool has_sinr = !std::isnan(sinr_db);
-  bool has_rssi = !std::isnan(rssi_dbm);
-
-  int bars = this->calc_mobile_bars(has_rsrp, rsrp_dbm, has_rsrq, rsrq_db,
-                                    has_sinr, sinr_db, has_rssi, rssi_dbm);
-  this->state_["wwan.signalStrength.bars"] = std::to_string(bars);
-
-  ESP_LOGD(TAG, "Fetch complete (free heap: %u bytes)",
-           esp_get_free_heap_size());
-
-  return true;
+  return success;
 }
 
 // REMOVED: fetch_once_ - replaced by fetch_and_parse_() with filtering
