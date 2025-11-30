@@ -94,7 +94,7 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
   // Parse dotted path like "power.battChargeLevel" and add to filter
   // This creates the nested structure: filter["power"]["battChargeLevel"] = true
 
-  ESP_LOGD(TAG, "Adding path to JSON filter: %s", path.c_str());
+  ESP_LOGD(TAG, "Adding path to JSON filter: %s", path.c_str());;
   JsonVariant current = this->json_filter_.as<JsonVariant>();
   size_t start = 0;
 
@@ -123,6 +123,10 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
     }
     start = dot + 1;
   }
+
+  std::string filter_str;
+  serializeJson(this->json_filter_, filter_str);
+  ESP_LOGD(TAG, "JSON filter: %s", filter_str.c_str())
 }
 
 float NetgearM5Component::extract_signal_value_(const std::string& key) {
