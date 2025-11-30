@@ -789,6 +789,7 @@ void NetgearM5Component::bind_binary_sensor(const std::string& json_path,
                                             const std::string& on_value,
                                             const std::string& off_value) {
   ESP_LOGD(TAG, "Binding binary sensor to path: %s (on: %s, off: %s)",
+           json_path.c_str(), on_value.c_str(), off_value.c_str());
   this->bin_bindings_.push_back({json_path, s, on_value, off_value});
   add_path_to_filter_(json_path);
 }
