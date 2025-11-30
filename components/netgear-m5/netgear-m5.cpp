@@ -86,6 +86,7 @@ void NetgearM5Component::build_json_filter_() {
   this->json_filter_["wwan"]["signalStrength"]["sinr"] = true;
   this->json_filter_["wwan"]["signalStrength"]["rssi"] = true;
 
+  ESP_LOGD(TAG, "Adding JSON filter paths from bindings");
   // Add paths from user-configured bindings
   for (const auto& b : this->num_bindings_) {
     add_path_to_filter_(b.path);
