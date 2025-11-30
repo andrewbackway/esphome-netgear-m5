@@ -772,12 +772,14 @@ std::string NetgearM5Component::dotted_lookup_(
 
 void NetgearM5Component::bind_numeric_sensor(const std::string& json_path,
                                              sensor::Sensor* s) {
+  ESP_LOGD(TAG, "Binding numeric sensor to path: %s", json_path.c_str());
   this->num_bindings_.push_back({json_path, s});
   add_path_to_filter_(json_path);
 }
 
 void NetgearM5Component::bind_text_sensor(const std::string& json_path,
                                           text_sensor::TextSensor* s) {
+  ESP_LOGD(TAG, "Binding text sensor to path: %s", json_path.c_str());
   this->text_bindings_.push_back({json_path, s});
   add_path_to_filter_(json_path);
 }
@@ -786,6 +788,7 @@ void NetgearM5Component::bind_binary_sensor(const std::string& json_path,
                                             binary_sensor::BinarySensor* s,
                                             const std::string& on_value,
                                             const std::string& off_value) {
+  ESP_LOGD(TAG, "Binding binary sensor to path: %s (on: %s, off: %s)",
   this->bin_bindings_.push_back({json_path, s, on_value, off_value});
   add_path_to_filter_(json_path);
 }
