@@ -96,6 +96,8 @@ void NetgearM5Component::build_json_filter_() {
   this->json_filter_["wifi"]["offload"]["connectionSsid"] = true;
   this->json_filter_["wifi"]["offload"]["scanProgress"] = true;
   this->json_filter_["wifi"]["offload"]["status"] = true;
+  this->json_filter_["general"]["devTemperature"] = true;
+  this->json_filter_["power"]["battChargeLevel"] = true;
   // end of hack
 
   // Do NOT add user-configured binding paths here; those are added incrementally in bind_* methods
