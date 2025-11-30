@@ -25,8 +25,7 @@ void NetgearM5Component::setup() {
   this->text_bindings_.reserve(10);
   this->bin_bindings_.reserve(5);
 
-  // Build the JSON filter once at setup - this dramatically reduces memory usage
-  // by only parsing the fields we actually need from the ~28KB response
+  // Build the JSON filter base (always-needed fields)
   this->build_json_filter_();
 
   // Reduced stack size since we no longer need large buffers on stack
@@ -86,19 +85,8 @@ void NetgearM5Component::build_json_filter_() {
   this->json_filter_["wwan"]["signalStrength"]["sinr"] = true;
   this->json_filter_["wwan"]["signalStrength"]["rssi"] = true;
 
-  ESP_LOGD(TAG, "Adding JSON filter paths from bindings");
-  // Add paths from user-configured bindings
-  for (const auto& b : this->num_bindings_) {
-    add_path_to_filter_(b.path);
-  }
-  for (const auto& b : this->text_bindings_) {
-    add_path_to_filter_(b.path);
-  }
-  for (const auto& b : this->bin_bindings_) {
-    add_path_to_filter_(b.path);
-  }
-
-  ESP_LOGD(TAG, "Built JSON filter with %u bytes",
+  // Do NOT add user-configured binding paths here; those are added incrementally in bind_* methods
+  ESP_LOGD(TAG, "Built JSON filter base with %u bytes",
            (unsigned)this->json_filter_.memoryUsage());
 }
 
@@ -781,11 +769,13 @@ std::string NetgearM5Component::dotted_lookup_(
 void NetgearM5Component::bind_numeric_sensor(const std::string& json_path,
                                              sensor::Sensor* s) {
   this->num_bindings_.push_back({json_path, s});
+  add_path_to_filter_(json_path);
 }
 
 void NetgearM5Component::bind_text_sensor(const std::string& json_path,
                                           text_sensor::TextSensor* s) {
   this->text_bindings_.push_back({json_path, s});
+  add_path_to_filter_(json_path);
 }
 
 void NetgearM5Component::bind_binary_sensor(const std::string& json_path,
@@ -793,6 +783,7 @@ void NetgearM5Component::bind_binary_sensor(const std::string& json_path,
                                             const std::string& on_value,
                                             const std::string& off_value) {
   this->bin_bindings_.push_back({json_path, s, on_value, off_value});
+  add_path_to_filter_(json_path);
 }
 
 int NetgearM5Component::clamp01(int v, int lo, int hi) {
