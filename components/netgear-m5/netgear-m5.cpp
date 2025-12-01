@@ -41,11 +41,6 @@ void NetgearM5Component::loop() {
              (unsigned)this->sensors_.size(), (unsigned)this->text_sensors_.size(),
              (unsigned)this->binary_sensors_.size());
     
-    // Log the final filter for debugging
-    std::string filter_str;
-    serializeJson(this->json_filter_, filter_str);
-    ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
-    
     xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
                             "netgear_m5_task", 6144, this, 4, &this->task_handle_,
                             1);
@@ -103,8 +98,7 @@ void NetgearM5Component::build_json_filter_() {
   this->json_filter_["wwan"]["signalStrength"]["rssi"] = true;
 
   // Do NOT add user-configured binding paths here; those are added incrementally in bind_* methods
-  ESP_LOGD(TAG, "Built JSON filter base with %u bytes",
-           (unsigned)this->json_filter_.memoryUsage());
+  ESP_LOGD(TAG, "Built JSON filter base");
 }
 
 void NetgearM5Component::add_path_to_filter_(const std::string& path) {
@@ -469,8 +463,7 @@ esp_err_t NetgearM5Component::_stream_event_handler(esp_http_client_event_t* evt
               dotted_lookup_("wwan.signalStrength.rssi", root);
 
           ctx->parse_complete = true;
-          ESP_LOGD(TAG, "Filtered JSON parsed successfully, doc size: %u bytes",
-                   (unsigned)doc.memoryUsage());
+          ESP_LOGD(TAG, "Filtered JSON parsed successfully");
         } else {
           ESP_LOGW(TAG, "Parsed JSON is not an object");
           ctx->parse_error = true;
