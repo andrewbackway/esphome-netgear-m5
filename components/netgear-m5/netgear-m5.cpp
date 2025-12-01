@@ -347,7 +347,7 @@ esp_err_t NetgearM5Component::stream_json_request_(
 
       auto setCookieValue = this->last_headers_.find("Set-Cookie");
       if (setCookieValue != this->last_headers_.end()) {
-        ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
+        ESP_LOGD(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
         this->cookie_ = setCookieValue->second;
       }
 
@@ -355,12 +355,12 @@ esp_err_t NetgearM5Component::stream_json_request_(
         auto locationValue = this->last_headers_.find("Location");
         if (locationValue != this->last_headers_.end() &&
             locationValue->second != current_url) {
-          ESP_LOGI(TAG, "Redirect Location Found: %s",
+          ESP_LOGD(TAG, "Redirect Location Found: %s",
                    locationValue->second.c_str());
 
           size_t pos = locationValue->second.find("index.html");
           if (pos != std::string::npos) {
-            ESP_LOGI(TAG, "Cancelling redirection to index.html");
+            ESP_LOGD(TAG, "Cancelling redirection to index.html");
             current_url.clear();
           } else {
             current_url = locationValue->second;
@@ -558,7 +558,7 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
 
       auto setCookieValue = this->last_headers_.find("Set-Cookie");
       if (setCookieValue != this->last_headers_.end()) {
-        ESP_LOGI(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
+        ESP_LOGD(TAG, "Set-Cookie: %s", setCookieValue->second.c_str());
         this->cookie_ = setCookieValue->second;
       }
 
@@ -566,7 +566,7 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
         auto locationValue = this->last_headers_.find("Location");
         if (locationValue != this->last_headers_.end() &&
             locationValue->second != current_url) {
-          ESP_LOGI(TAG, "Redirect Location Found: %s",
+          ESP_LOGD(TAG, "Redirect Location Found: %s",
                    locationValue->second.c_str());
 
           // Only cancel index.html redirect for GET requests
@@ -574,7 +574,7 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
           // login
           size_t pos = locationValue->second.find("index.html");
           if (pos != std::string::npos && method == HTTP_METHOD_GET) {
-            ESP_LOGI(TAG, "Cancelling GET redirection to index.html");
+            ESP_LOGD(TAG, "Cancelling GET redirection to index.html");
             current_url.clear();
           } else {
             current_url = locationValue->second;
