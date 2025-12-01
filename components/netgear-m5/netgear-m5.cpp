@@ -88,21 +88,6 @@ void NetgearM5Component::build_json_filter_() {
   this->json_filter_["wwan"]["signalStrength"]["sinr"] = true;
   this->json_filter_["wwan"]["signalStrength"]["rssi"] = true;
 
-  // hack until we get more ai credits
-  this->json_filter_["wifi"]["clientCount"] = true;
-  this->json_filter_["wwanadv"]["cellId"] = true;
-  this->json_filter_["wwan"]["signalStrength"]["bars"] = true;
-  this->json_filter_["general"]["deviceName"] = true;
-  this->json_filter_["wwan"]["registerNetworkDisplay"] = true;
-  this->json_filter_["wwan"]["connectionText"] = true;
-  this->json_filter_["wwan"]["connection"] = true;
-  this->json_filter_["wifi"]["offload"]["connectionSsid"] = true;
-  this->json_filter_["wifi"]["offload"]["scanProgress"] = true;
-  this->json_filter_["wifi"]["offload"]["status"] = true;
-  this->json_filter_["general"]["devTemperature"] = true;
-  this->json_filter_["power"]["battChargeLevel"] = true;
-  // end of hack
-
   // Do NOT add user-configured binding paths here; those are added incrementally in bind_* methods
   ESP_LOGD(TAG, "Built JSON filter base with %u bytes",
            (unsigned)this->json_filter_.memoryUsage());
