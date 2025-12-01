@@ -20,49 +20,80 @@ web_server:
   local: true
 
 netgear-m5:
+  id: netgear_m5_hub
   host: HOSTIP
   password: PASSWORD
   poll_interval: 10s
 
-  sensors: 
-  - name: Battery Level
+sensor:
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Battery Level
     path: power.battChargeLevel
     unit_of_measurement: "%"
-  - name: Device Temperature
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Device Temperature
     path: general.devTemperature
     unit_of_measurement: "°C"
-  - name: RSSI
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: RSSI
     path: wwan.signalStrength.rssi
     unit_of_measurement: "dBm"
-  - name: RSRP
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: RSRP
     path: wwan.signalStrength.rsrp
     unit_of_measurement: "dBm"
-  - name: RSRQ
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: RSRQ
     path: wwan.signalStrength.rsrq
     unit_of_measurement: "dB"
-  - name: WiFi Clients
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: WiFi Clients
     path: wifi.clientCount
-  - name: Cell Tower ID
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Cell Tower ID
     path: wwanadv.cellId
-  - name: Bars
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Bars
     path: wwan.signalStrength.bars
     
-  text_sensors: 
-  - name: Device Name
+text_sensor:
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Device Name
     path: general.deviceName
-  - name: Mobile Carrier
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Mobile Carrier
     path: wwan.registerNetworkDisplay 
-  - name: Mobile Band
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Mobile Band
     path: wwan.connectionText    
-  - name: Mobile Status
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Mobile Status
     path: wwan.connection
-  - name: Offload WiFi SSID
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Offload WiFi SSID
     path: wifi.offload.connectionSsid
-  - name: Offload Scan Progress
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Offload Scan Progress
     path: wifi.offload.scanProgress
 
-  binary_sensors:
-    - name: Offloading via WiFi
-      path: wifi.offload.status
-      on_value: "On"
-      off_value: "Off"
+binary_sensor:
+  - platform: netgear-m5
+    netgear_m5_id: netgear_m5_hub
+    name: Offloading via WiFi
+    path: wifi.offload.status
+    on_value: "On"
+    off_value: "Off"

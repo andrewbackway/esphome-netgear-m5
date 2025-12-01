@@ -7,9 +7,6 @@
 #include <ArduinoJson.h>
 #include "esp_http_client.h"
 #include "esphome.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
-#include "esphome/components/sensor/sensor.h"
-#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/core/log.h"
 
 extern "C" {
@@ -19,6 +16,11 @@ extern "C" {
 
 namespace esphome {
 namespace netgear_m5 {
+
+// Forward declarations for platform sensors
+class NetgearM5Sensor;
+class NetgearM5TextSensor;
+class NetgearM5BinarySensor;
 
 class NetgearM5Component : public Component {
  public:
@@ -30,13 +32,10 @@ class NetgearM5Component : public Component {
   void loop() override;
   void dump_config() override;
 
-  void bind_numeric_sensor(const std::string &json_path, sensor::Sensor *s);
-  void bind_text_sensor(const std::string &json_path,
-                        text_sensor::TextSensor *s);
-  void bind_binary_sensor(const std::string &json_path,
-                          binary_sensor::BinarySensor *s,
-                          const std::string &on_value,
-                          const std::string &off_value);
+  // Platform-based sensor registration (called by sensors during their setup)
+  void register_sensor(NetgearM5Sensor *sensor);
+  void register_text_sensor(NetgearM5TextSensor *sensor);
+  void register_binary_sensor(NetgearM5BinarySensor *sensor);
 
   // Access cookie
   const std::string &cookie() const { return cookie_; }
@@ -114,24 +113,10 @@ class NetgearM5Component : public Component {
   std::map<std::string, std::string> state_;  // Stores parsed JSON values
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 
-  struct NumBinding {
-    std::string path;
-    sensor::Sensor *sensor{nullptr};
-  };
-  struct TextBinding {
-    std::string path;
-    text_sensor::TextSensor *sensor{nullptr};
-  };
-  struct BinBinding {
-    std::string path;
-    binary_sensor::BinarySensor *sensor{nullptr};
-    std::string on_value{"true"};
-    std::string off_value{"false"};
-  };
-
-  std::vector<NumBinding> num_bindings_;
-  std::vector<TextBinding> text_bindings_;
-  std::vector<BinBinding> bin_bindings_;
+  // Platform-based sensor storage
+  std::vector<NetgearM5Sensor *> sensors_;
+  std::vector<NetgearM5TextSensor *> text_sensors_;
+  std::vector<NetgearM5BinarySensor *> binary_sensors_;
 
   // Context for small HTTP requests (login, cookies)
   struct RequestContext {
