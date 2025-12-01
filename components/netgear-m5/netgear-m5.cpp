@@ -41,6 +41,11 @@ void NetgearM5Component::loop() {
              (unsigned)this->sensors_.size(), (unsigned)this->text_sensors_.size(),
              (unsigned)this->binary_sensors_.size());
     
+    // Log the final filter for debugging
+    std::string filter_str;
+    serializeJson(this->json_filter_, filter_str);
+    ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
+    
     xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
                             "netgear_m5_task", 6144, this, 4, &this->task_handle_,
                             1);
