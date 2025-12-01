@@ -116,14 +116,24 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
   // true
 
   ESP_LOGD(TAG, "Adding path to JSON filter: %s", path.c_str());
-  JsonVariant current = this->json_filter_.as<JsonVariant>();
+  
+  // Split path into segments
+  std::vector<std::string> segments;
   size_t start = 0;
-
   while (start < path.size()) {
     size_t dot = path.find('.', start);
     size_t end = (dot == std::string::npos) ? path.size() : dot;
+    segments.push_back(path.substr(start, end - start));
+    if (dot == std::string::npos) break;
+    start = dot + 1;
+  }
 
-    std::string key = path.substr(start, end - start);
+  // Navigate to the parent and set the final key
+  JsonVariant current = this->json_filter_.as<JsonVariant>();
+  
+  for (size_t i = 0; i < segments.size(); ++i) {
+    const std::string& key = segments[i];
+    bool is_last = (i == segments.size() - 1);
 
     // Handle array notation like "list[0]"
     size_t bracket = key.find('[');
@@ -131,20 +141,29 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
       std::string array_key = key.substr(0, bracket);
       // For arrays, we just need to mark the first element as needing parsing
       // ArduinoJson will apply the filter to all array elements
-      current = current[array_key.c_str()];
-      current = current[0];
+      if (is_last) {
+        if (!array_key.empty()) {
+          current[array_key.c_str()][0] = true;
+        } else {
+          current[0] = true;
+        }
+      } else {
+        if (!array_key.empty()) {
+          current = current[array_key.c_str()][0];
+        } else {
+          current = current[0];
+        }
+      }
     } else {
-      current = current[key.c_str()];
+      if (is_last) {
+        current[key.c_str()] = true;
+      } else {
+        current = current[key.c_str()];
+      }
     }
-
-    if (dot == std::string::npos) {
-      // Last segment - mark as true to include this field
-      current.set(true);
-      break;
-    }
-    start = dot + 1;
   }
- // Log the final filter for debugging
+
+  // Log the final filter for debugging
   std::string filter_str;
   serializeJson(this->json_filter_, filter_str);
   ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
