@@ -128,39 +128,25 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
     start = dot + 1;
   }
 
-  // Navigate to the parent and set the final key
-  JsonVariant current = this->json_filter_.as<JsonVariant>();
-  
-  for (size_t i = 0; i < segments.size(); ++i) {
-    const std::string& key = segments[i];
-    bool is_last = (i == segments.size() - 1);
+  if (segments.empty()) return;
 
-    // Handle array notation like "list[0]"
-    size_t bracket = key.find('[');
-    if (bracket != std::string::npos) {
-      std::string array_key = key.substr(0, bracket);
-      // For arrays, we just need to mark the first element as needing parsing
-      // ArduinoJson will apply the filter to all array elements
-      if (is_last) {
-        if (!array_key.empty()) {
-          current[array_key.c_str()][0] = true;
-        } else {
-          current[0] = true;
-        }
-      } else {
-        if (!array_key.empty()) {
-          current = current[array_key.c_str()][0];
-        } else {
-          current = current[0];
-        }
-      }
-    } else {
-      if (is_last) {
-        current[key.c_str()] = true;
-      } else {
-        current = current[key.c_str()];
-      }
-    }
+  // Build the nested path directly in the filter document
+  // We can't use intermediate JsonVariant assignments because they create
+  // copies that don't persist back to the document
+  
+  // Instead, build the path by chaining subscript operators in a single expression
+  if (segments.size() == 1) {
+    this->json_filter_[segments[0].c_str()] = true;
+  } else if (segments.size() == 2) {
+    this->json_filter_[segments[0].c_str()][segments[1].c_str()] = true;
+  } else if (segments.size() == 3) {
+    this->json_filter_[segments[0].c_str()][segments[1].c_str()][segments[2].c_str()] = true;
+  } else if (segments.size() == 4) {
+    this->json_filter_[segments[0].c_str()][segments[1].c_str()][segments[2].c_str()][segments[3].c_str()] = true;
+  } else if (segments.size() == 5) {
+    this->json_filter_[segments[0].c_str()][segments[1].c_str()][segments[2].c_str()][segments[3].c_str()][segments[4].c_str()] = true;
+  } else {
+    ESP_LOGW(TAG, "Path too deep (max 5 levels): %s", path.c_str());
   }
 
   // Log the final filter for debugging
