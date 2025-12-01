@@ -28,16 +28,30 @@ void NetgearM5Component::setup() {
   this->text_sensors_.reserve(10);
   this->binary_sensors_.reserve(5);
 
-  // Note: JSON filter will be built on first fetch, after all sensors are registered
-  // This ensures all sensor paths are included in the filter
+  // Build base JSON filter structure so sensors can add their paths during registration
+  this->build_json_filter_();
 
-  // Reduced stack size since we no longer need large buffers on stack
-  xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
-                          "netgear_m5_task", 6144, this, 4, &this->task_handle_,
-                          1);
+  // Note: Background task will be started in loop() after sensors have had a chance to register
 }
 
 void NetgearM5Component::loop() {
+  // Start background task on first loop iteration (after all sensors have set up)
+  if (!this->task_started_) {
+    ESP_LOGD(TAG, "Starting background task (registered %u sensors, %u text sensors, %u binary sensors)",
+             (unsigned)this->sensors_.size(), (unsigned)this->text_sensors_.size(),
+             (unsigned)this->binary_sensors_.size());
+    
+    // Log the final filter for debugging
+    std::string filter_str;
+    serializeJson(this->json_filter_, filter_str);
+    ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
+    
+    xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
+                            "netgear_m5_task", 6144, this, 4, &this->task_handle_,
+                            1);
+    this->task_started_ = true;
+  }
+  
   if (this->has_new_state_) {
     this->publish_pending_();
   }
@@ -144,13 +158,6 @@ float NetgearM5Component::extract_signal_value_(const std::string& key) {
 bool NetgearM5Component::fetch_and_parse_() {
   // Memory-efficient fetch and parse using ArduinoJson filtering
   // Dynamically allocate buffer only during fetch to avoid permanent RAM usage
-
-  // Build JSON filter on first fetch (after all sensors have registered)
-  if (!this->filter_built_) {
-    ESP_LOGD(TAG, "Building JSON filter with registered sensors");
-    this->build_json_filter_();
-    this->filter_built_ = true;
-  }
 
   // Allocate buffer at start of fetch
   if (this->stream_buf_ == nullptr) {

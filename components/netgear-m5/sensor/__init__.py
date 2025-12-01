@@ -26,8 +26,9 @@ CONFIG_SCHEMA = (
 
 async def to_code(config):
     var = await sensor.new_sensor(config)
-    await cg.register_component(var, config)
-
+    
     parent = await cg.get_variable(config[CONF_NETGEAR_M5_ID])
     cg.add(var.set_parent(parent))
     cg.add(var.set_path(config[CONF_PATH]))
+    
+    await cg.register_component(var, config)

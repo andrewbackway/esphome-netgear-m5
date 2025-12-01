@@ -60,7 +60,6 @@ class NetgearM5Component : public Component {
   // JSON filter document - built once at setup, used for all parses
   // This filters the ~28KB JSON down to only the fields we need
   JsonDocument json_filter_;
-  bool filter_built_{false};  // Track if filter has been initialized
 
   int last_status_code_ = 0;
   std::map<std::string, std::string> last_headers_;
@@ -111,6 +110,7 @@ class NetgearM5Component : public Component {
 
   TaskHandle_t task_handle_{nullptr};
   volatile bool has_new_state_{false};
+  bool task_started_{false};  // Track if background task has been started
   std::map<std::string, std::string> state_;  // Stores parsed JSON values
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 

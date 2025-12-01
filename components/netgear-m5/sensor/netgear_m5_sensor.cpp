@@ -8,6 +8,10 @@ namespace netgear_m5 {
 static const char *const TAG = "netgear_m5.sensor";
 
 void NetgearM5Sensor::setup() {
+  if (parent_ == nullptr) {
+    ESP_LOGE(TAG, "Parent is null in setup()!");
+    return;
+  }
   parent_->register_sensor(this);
 }
 

@@ -30,10 +30,11 @@ CONFIG_SCHEMA = (
 
 async def to_code(config):
     var = await binary_sensor.new_binary_sensor(config)
-    await cg.register_component(var, config)
-
+    
     parent = await cg.get_variable(config[CONF_NETGEAR_M5_ID])
     cg.add(var.set_parent(parent))
     cg.add(var.set_path(config[CONF_PATH]))
     cg.add(var.set_on_value(config[CONF_ON_VALUE]))
     cg.add(var.set_off_value(config[CONF_OFF_VALUE]))
+    
+    await cg.register_component(var, config)
