@@ -1,4 +1,7 @@
 #include "netgear-m5.h"
+#include "sensor/netgear_m5_sensor.h"
+#include "text_sensor/netgear_m5_text_sensor.h"
+#include "binary_sensor/netgear_m5_binary_sensor.h"
 
 #include <ArduinoJson.h>
 
@@ -20,10 +23,10 @@ static constexpr size_t STREAM_CHUNK_SIZE = 1024;
 void NetgearM5Component::setup() {
   ESP_LOGD(TAG, "Setting up Netgear M5 component");
 
-  // Reserve capacity for bindings to reduce heap fragmentation
-  this->num_bindings_.reserve(10);
-  this->text_bindings_.reserve(10);
-  this->bin_bindings_.reserve(5);
+  // Reserve capacity for sensors to reduce heap fragmentation
+  this->sensors_.reserve(10);
+  this->text_sensors_.reserve(10);
+  this->binary_sensors_.reserve(5);
 
   // Build the JSON filter base (always-needed fields)
   this->build_json_filter_();
@@ -440,23 +443,23 @@ esp_err_t NetgearM5Component::_stream_event_handler(esp_http_client_event_t* evt
             self->sec_token_ = sec_token;
           }
 
-          // Extract all bound sensor values
-          for (const auto& b : self->num_bindings_) {
-            std::string val = dotted_lookup_(b.path, root);
+          // Extract all sensor values using platform-based sensor registration
+          for (const auto* sensor : self->sensors_) {
+            std::string val = dotted_lookup_(sensor->get_path(), root);
             if (!val.empty()) {
-              self->state_[b.path] = val;
+              self->state_[sensor->get_path()] = val;
             }
           }
-          for (const auto& b : self->text_bindings_) {
-            std::string val = dotted_lookup_(b.path, root);
+          for (const auto* sensor : self->text_sensors_) {
+            std::string val = dotted_lookup_(sensor->get_path(), root);
             if (!val.empty()) {
-              self->state_[b.path] = val;
+              self->state_[sensor->get_path()] = val;
             }
           }
-          for (const auto& b : self->bin_bindings_) {
-            std::string val = dotted_lookup_(b.path, root);
+          for (const auto* sensor : self->binary_sensors_) {
+            std::string val = dotted_lookup_(sensor->get_path(), root);
             if (!val.empty()) {
-              self->state_[b.path] = val;
+              self->state_[sensor->get_path()] = val;
             }
           }
 
@@ -651,47 +654,50 @@ void NetgearM5Component::publish_pending_() {
   taskEXIT_CRITICAL(&this->mux_);
 
   // Numeric sensors
-  for (auto& b : this->num_bindings_) {
-    if (!b.sensor) continue;
-    auto it = state.find(b.path);
+  for (auto* sensor : this->sensors_) {
+    if (!sensor) continue;
+    const std::string& path = sensor->get_path();
+    auto it = state.find(path);
     if (it != state.end() && !it->second.empty()) {
-      ESP_LOGD(TAG, "Numeric sensor path %s: value %s", b.path.c_str(),
+      ESP_LOGD(TAG, "Numeric sensor path %s: value %s", path.c_str(),
                it->second.c_str());
       char* endptr;
       errno = 0;
       double value = strtod(it->second.c_str(), &endptr);
       if (endptr == it->second.c_str() || *endptr != '\0' || errno == ERANGE) {
-        ESP_LOGW(TAG, "Invalid numeric value at %s: %s", b.path.c_str(),
+        ESP_LOGW(TAG, "Invalid numeric value at %s: %s", path.c_str(),
                  it->second.c_str());
         continue;
       }
-      b.sensor->publish_state(value);
+      sensor->publish_state(value);
     }
   }
 
   // Text sensors
-  for (auto& b : this->text_bindings_) {
-    if (!b.sensor) continue;
-    auto it = state.find(b.path);
+  for (auto* sensor : this->text_sensors_) {
+    if (!sensor) continue;
+    const std::string& path = sensor->get_path();
+    auto it = state.find(path);
     if (it != state.end() && !it->second.empty()) {
-      ESP_LOGD(TAG, "Text sensor path %s: value %s", b.path.c_str(),
+      ESP_LOGD(TAG, "Text sensor path %s: value %s", path.c_str(),
                it->second.c_str());
-      b.sensor->publish_state(it->second);
+      sensor->publish_state(it->second);
     }
   }
 
   // Binary sensors
-  for (auto& b : this->bin_bindings_) {
-    if (!b.sensor) continue;
-    auto it = state.find(b.path);
+  for (auto* sensor : this->binary_sensors_) {
+    if (!sensor) continue;
+    const std::string& path = sensor->get_path();
+    auto it = state.find(path);
     if (it != state.end()) {
       ESP_LOGD(TAG, "Binary sensor path %s: value %s (on: %s, off: %s)",
-               b.path.c_str(), it->second.c_str(), b.on_value.c_str(),
-               b.off_value.c_str());
-      if (it->second == b.on_value) {
-        b.sensor->publish_state(true);
-      } else if (it->second == b.off_value) {
-        b.sensor->publish_state(false);
+               path.c_str(), it->second.c_str(), sensor->get_on_value().c_str(),
+               sensor->get_off_value().c_str());
+      if (it->second == sensor->get_on_value()) {
+        sensor->publish_state(true);
+      } else if (it->second == sensor->get_off_value()) {
+        sensor->publish_state(false);
       }
     }
   }
@@ -785,28 +791,24 @@ std::string NetgearM5Component::dotted_lookup_(
   return out;
 }
 
-void NetgearM5Component::bind_numeric_sensor(const std::string& json_path,
-                                             sensor::Sensor* s) {
-  ESP_LOGD(TAG, "Binding numeric sensor to path: %s", json_path.c_str());
-  this->num_bindings_.push_back({json_path, s});
-  add_path_to_filter_(json_path);
+void NetgearM5Component::register_sensor(NetgearM5Sensor* sensor) {
+  ESP_LOGD(TAG, "Registering numeric sensor for path: %s", sensor->get_path().c_str());
+  this->sensors_.push_back(sensor);
+  add_path_to_filter_(sensor->get_path());
 }
 
-void NetgearM5Component::bind_text_sensor(const std::string& json_path,
-                                          text_sensor::TextSensor* s) {
-  ESP_LOGD(TAG, "Binding text sensor to path: %s", json_path.c_str());
-  this->text_bindings_.push_back({json_path, s});
-  add_path_to_filter_(json_path);
+void NetgearM5Component::register_text_sensor(NetgearM5TextSensor* sensor) {
+  ESP_LOGD(TAG, "Registering text sensor for path: %s", sensor->get_path().c_str());
+  this->text_sensors_.push_back(sensor);
+  add_path_to_filter_(sensor->get_path());
 }
 
-void NetgearM5Component::bind_binary_sensor(const std::string& json_path,
-                                            binary_sensor::BinarySensor* s,
-                                            const std::string& on_value,
-                                            const std::string& off_value) {
-  ESP_LOGD(TAG, "Binding binary sensor to path: %s (on: %s, off: %s)",
-           json_path.c_str(), on_value.c_str(), off_value.c_str());
-  this->bin_bindings_.push_back({json_path, s, on_value, off_value});
-  add_path_to_filter_(json_path);
+void NetgearM5Component::register_binary_sensor(NetgearM5BinarySensor* sensor) {
+  ESP_LOGD(TAG, "Registering binary sensor for path: %s (on: %s, off: %s)",
+           sensor->get_path().c_str(), sensor->get_on_value().c_str(), 
+           sensor->get_off_value().c_str());
+  this->binary_sensors_.push_back(sensor);
+  add_path_to_filter_(sensor->get_path());
 }
 
 int NetgearM5Component::clamp01(int v, int lo, int hi) {
