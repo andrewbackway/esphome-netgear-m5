@@ -60,6 +60,7 @@ class NetgearM5Component : public Component {
   // JSON filter document - built once at setup, used for all parses
   // This filters the ~28KB JSON down to only the fields we need
   JsonDocument json_filter_;
+  bool filter_built_{false};  // Track if filter has been initialized
 
   int last_status_code_ = 0;
   std::map<std::string, std::string> last_headers_;

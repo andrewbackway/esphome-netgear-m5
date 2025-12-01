@@ -28,8 +28,8 @@ void NetgearM5Component::setup() {
   this->text_sensors_.reserve(10);
   this->binary_sensors_.reserve(5);
 
-  // Build the JSON filter base (always-needed fields)
-  this->build_json_filter_();
+  // Note: JSON filter will be built on first fetch, after all sensors are registered
+  // This ensures all sensor paths are included in the filter
 
   // Reduced stack size since we no longer need large buffers on stack
   xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
@@ -144,6 +144,13 @@ float NetgearM5Component::extract_signal_value_(const std::string& key) {
 bool NetgearM5Component::fetch_and_parse_() {
   // Memory-efficient fetch and parse using ArduinoJson filtering
   // Dynamically allocate buffer only during fetch to avoid permanent RAM usage
+
+  // Build JSON filter on first fetch (after all sensors have registered)
+  if (!this->filter_built_) {
+    ESP_LOGD(TAG, "Building JSON filter with registered sensors");
+    this->build_json_filter_();
+    this->filter_built_ = true;
+  }
 
   // Allocate buffer at start of fetch
   if (this->stream_buf_ == nullptr) {
