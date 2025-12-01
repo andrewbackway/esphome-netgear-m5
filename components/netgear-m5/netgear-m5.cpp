@@ -1,7 +1,4 @@
 #include "netgear-m5.h"
-#include "sensor/netgear_m5_sensor.h"
-#include "text_sensor/netgear_m5_text_sensor.h"
-#include "binary_sensor/netgear_m5_binary_sensor.h"
 
 #include <ArduinoJson.h>
 
@@ -11,11 +8,16 @@
 #include <limits>
 #include <string>
 
+#include "binary_sensor/netgear_m5_binary_sensor.h"
+#include "sensor/netgear_m5_sensor.h"
+#include "text_sensor/netgear_m5_text_sensor.h"
+
 namespace esphome {
 namespace netgear_m5 {
 
 static const char* const TAG = "netgear_m5";
-static constexpr size_t MAX_HTTP_BODY = 4 * 1024;  // 4 KB cap for login/cookie responses
+static constexpr size_t MAX_HTTP_BODY =
+    4 * 1024;  // 4 KB cap for login/cookie responses
 
 // Memory-efficient streaming buffer - smaller chunks for HTTP data
 static constexpr size_t STREAM_CHUNK_SIZE = 1024;
@@ -28,30 +30,31 @@ void NetgearM5Component::setup() {
   this->text_sensors_.reserve(10);
   this->binary_sensors_.reserve(5);
 
-  // Build base JSON filter structure so sensors can add their paths during registration
-  this->build_json_filter_();
-
-  // Note: Background task will be started in loop() after sensors have had a chance to register
+  // Note: Background task will be started in loop() after sensors have had a
+  // chance to register
 }
 
 void NetgearM5Component::loop() {
-  // Start background task on first loop iteration (after all sensors have set up)
+  // Start background task on first loop iteration (after all sensors have set
+  // up)
   if (!this->task_started_) {
-    ESP_LOGD(TAG, "Starting background task (registered %u sensors, %u text sensors, %u binary sensors)",
-             (unsigned)this->sensors_.size(), (unsigned)this->text_sensors_.size(),
+    // Build base JSON filter structure so sensors can add their paths during
+    // registration
+    this->build_json_filter_();
+
+    ESP_LOGD(TAG,
+             "Starting background task (registered %u sensors, %u text "
+             "sensors, %u binary sensors)",
+             (unsigned)this->sensors_.size(),
+             (unsigned)this->text_sensors_.size(),
              (unsigned)this->binary_sensors_.size());
-    
-    // Log the final filter for debugging
-    std::string filter_str;
-    serializeJson(this->json_filter_, filter_str);
-    ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
-    
+
     xTaskCreatePinnedToCore(&NetgearM5Component::task_trampoline_,
-                            "netgear_m5_task", 6144, this, 4, &this->task_handle_,
-                            1);
+                            "netgear_m5_task", 6144, this, 4,
+                            &this->task_handle_, 1);
     this->task_started_ = true;
   }
-  
+
   if (this->has_new_state_) {
     this->publish_pending_();
   }
@@ -102,13 +105,15 @@ void NetgearM5Component::build_json_filter_() {
   this->json_filter_["wwan"]["signalStrength"]["sinr"] = true;
   this->json_filter_["wwan"]["signalStrength"]["rssi"] = true;
 
-  // Do NOT add user-configured binding paths here; those are added incrementally in bind_* methods
+  // Do NOT add user-configured binding paths here; those are added
+  // incrementally in bind_* methods
   ESP_LOGD(TAG, "Built JSON filter base");
 }
 
 void NetgearM5Component::add_path_to_filter_(const std::string& path) {
   // Parse dotted path like "power.battChargeLevel" and add to filter
-  // This creates the nested structure: filter["power"]["battChargeLevel"] = true
+  // This creates the nested structure: filter["power"]["battChargeLevel"] =
+  // true
 
   ESP_LOGD(TAG, "Adding path to JSON filter: %s", path.c_str());
   JsonVariant current = this->json_filter_.as<JsonVariant>();
@@ -154,6 +159,11 @@ bool NetgearM5Component::fetch_and_parse_() {
   // Memory-efficient fetch and parse using ArduinoJson filtering
   // Dynamically allocate buffer only during fetch to avoid permanent RAM usage
 
+  // Log the final filter for debugging
+  std::string filter_str;
+  serializeJson(this->json_filter_, filter_str);
+  ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
+
   // Allocate buffer at start of fetch
   if (this->stream_buf_ == nullptr) {
     this->stream_buf_ = static_cast<char*>(malloc(STREAM_BUF_SIZE));
@@ -192,7 +202,7 @@ bool NetgearM5Component::fetch_and_parse_() {
 
       this->stream_len_ = 0;
       esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "",
-                                                  "", login_filter);
+                                                 "", login_filter);
       if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to fetch model.json for login");
         goto cleanup;
@@ -211,8 +221,8 @@ bool NetgearM5Component::fetch_and_parse_() {
 
       std::string unused;
       esp_err_t login_err = this->_request(
-          "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST, login_body,
-          "application/x-www-form-urlencoded", unused);
+          "http://" + this->host_ + "/Forms/config", HTTP_METHOD_POST,
+          login_body, "application/x-www-form-urlencoded", unused);
 
       if (login_err != ESP_OK) {
         ESP_LOGE(TAG, "Login failed");
@@ -227,8 +237,8 @@ bool NetgearM5Component::fetch_and_parse_() {
     this->stream_len_ = 0;
     this->state_.clear();
 
-    esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "", "",
-                                                this->json_filter_);
+    esp_err_t err = this->stream_json_request_(model_url, HTTP_METHOD_GET, "",
+                                               "", this->json_filter_);
 
     if (err != ESP_OK) {
       ESP_LOGW(TAG, "Failed to fetch model.json");
@@ -367,7 +377,8 @@ esp_err_t NetgearM5Component::stream_json_request_(
   return err;
 }
 
-esp_err_t NetgearM5Component::_stream_event_handler(esp_http_client_event_t* evt) {
+esp_err_t NetgearM5Component::_stream_event_handler(
+    esp_http_client_event_t* evt) {
   auto* ctx = static_cast<StreamContext*>(evt->user_data);
   if (!ctx) return ESP_FAIL;
 
@@ -399,7 +410,8 @@ esp_err_t NetgearM5Component::_stream_event_handler(esp_http_client_event_t* evt
       if (evt->data && evt->data_len > 0) {
         // Accumulate data in small streaming buffer
         size_t remaining = STREAM_BUF_SIZE - self->stream_len_;
-        size_t to_copy = (evt->data_len < remaining) ? evt->data_len : remaining;
+        size_t to_copy =
+            (evt->data_len < remaining) ? evt->data_len : remaining;
 
         if (to_copy > 0) {
           memcpy(self->stream_buf_ + self->stream_len_, evt->data, to_copy);
@@ -420,9 +432,9 @@ esp_err_t NetgearM5Component::_stream_event_handler(esp_http_client_event_t* evt
         }
 
         JsonDocument doc;
-        DeserializationError err = deserializeJson(
-            doc, self->stream_buf_, self->stream_len_,
-            DeserializationOption::Filter(*ctx->filter));
+        DeserializationError err =
+            deserializeJson(doc, self->stream_buf_, self->stream_len_,
+                            DeserializationOption::Filter(*ctx->filter));
 
         if (err) {
           ESP_LOGW(TAG, "Filtered JSON parse failed: %s", err.c_str());
@@ -490,7 +502,8 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
   esp_err_t err = ESP_FAIL;
   std::string current_url = url;
 
-  // Clear response but don't pre-reserve - these are small responses (login/cookie)
+  // Clear response but don't pre-reserve - these are small responses
+  // (login/cookie)
   response.clear();
 
   while (true) {
@@ -546,9 +559,10 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
             locationValue->second != current_url) {
           ESP_LOGI(TAG, "Redirect Location Found: %s",
                    locationValue->second.c_str());
-          
+
           // Only cancel index.html redirect for GET requests
-          // POST to /Forms/config needs to complete the redirect to finalize login
+          // POST to /Forms/config needs to complete the redirect to finalize
+          // login
           size_t pos = locationValue->second.find("index.html");
           if (pos != std::string::npos && method == HTTP_METHOD_GET) {
             ESP_LOGI(TAG, "Cancelling GET redirection to index.html");
@@ -571,7 +585,8 @@ esp_err_t NetgearM5Component::_request(const std::string& url,
   return err;
 }
 
-// REMOVED: request_into_buffer_ - replaced by stream_json_request_ with filtering
+// REMOVED: request_into_buffer_ - replaced by stream_json_request_ with
+// filtering
 
 esp_err_t NetgearM5Component::_event_handler(esp_http_client_event_t* evt) {
   auto* ctx = static_cast<RequestContext*>(evt->user_data);
@@ -643,7 +658,8 @@ void NetgearM5Component::publish_pending_() {
   taskENTER_CRITICAL(&this->mux_);
   auto state = this->state_;
   this->has_new_state_ = false;
-  this->state_.clear();  // Free memory after copying, sensors maintain their own state
+  this->state_
+      .clear();  // Free memory after copying, sensors maintain their own state
   taskEXIT_CRITICAL(&this->mux_);
 
   // Numeric sensors
@@ -785,20 +801,22 @@ std::string NetgearM5Component::dotted_lookup_(
 }
 
 void NetgearM5Component::register_sensor(NetgearM5Sensor* sensor) {
-  ESP_LOGD(TAG, "Registering numeric sensor for path: %s", sensor->get_path().c_str());
+  ESP_LOGD(TAG, "Registering numeric sensor for path: %s",
+           sensor->get_path().c_str());
   this->sensors_.push_back(sensor);
   add_path_to_filter_(sensor->get_path());
 }
 
 void NetgearM5Component::register_text_sensor(NetgearM5TextSensor* sensor) {
-  ESP_LOGD(TAG, "Registering text sensor for path: %s", sensor->get_path().c_str());
+  ESP_LOGD(TAG, "Registering text sensor for path: %s",
+           sensor->get_path().c_str());
   this->text_sensors_.push_back(sensor);
   add_path_to_filter_(sensor->get_path());
 }
 
 void NetgearM5Component::register_binary_sensor(NetgearM5BinarySensor* sensor) {
   ESP_LOGD(TAG, "Registering binary sensor for path: %s (on: %s, off: %s)",
-           sensor->get_path().c_str(), sensor->get_on_value().c_str(), 
+           sensor->get_path().c_str(), sensor->get_on_value().c_str(),
            sensor->get_off_value().c_str());
   this->binary_sensors_.push_back(sensor);
   add_path_to_filter_(sensor->get_path());
