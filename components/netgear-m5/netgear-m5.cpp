@@ -150,10 +150,9 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
   }
 
   // Log the final filter for debugging
-  std::string filter_str;
-  serializeJson(this->json_filter_, filter_str);
-  ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
-
+  //std::string filter_str;
+  //serializeJson(this->json_filter_, filter_str);
+  //ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
 }
 
 float NetgearM5Component::extract_signal_value_(const std::string& key) {
@@ -170,9 +169,9 @@ bool NetgearM5Component::fetch_and_parse_() {
   // Dynamically allocate buffer only during fetch to avoid permanent RAM usage
 
   // Log the final filter for debugging
-  std::string filter_str;
-  serializeJson(this->json_filter_, filter_str);
-  ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
+  //std::string filter_str;
+  //serializeJson(this->json_filter_, filter_str);
+  //ESP_LOGD(TAG, "Final JSON filter: %s", filter_str.c_str());
 
   // Allocate buffer at start of fetch
   if (this->stream_buf_ == nullptr) {
