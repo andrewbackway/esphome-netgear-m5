@@ -30,6 +30,10 @@ void NetgearM5Component::setup() {
   this->text_sensors_.reserve(10);
   this->binary_sensors_.reserve(5);
 
+  // Build base JSON filter structure now so sensors can add their paths during
+  // registration
+  this->build_json_filter_();
+
   // Note: Background task will be started in loop() after sensors have had a
   // chance to register
 }
@@ -38,10 +42,6 @@ void NetgearM5Component::loop() {
   // Start background task on first loop iteration (after all sensors have set
   // up)
   if (!this->task_started_) {
-    // Build base JSON filter structure so sensors can add their paths during
-    // registration
-    this->build_json_filter_();
-
     ESP_LOGD(TAG,
              "Starting background task (registered %u sensors, %u text "
              "sensors, %u binary sensors)",
