@@ -144,6 +144,8 @@ void NetgearM5Component::add_path_to_filter_(const std::string& path) {
     }
     start = dot + 1;
   }
+
+  ESP_LOGD(TAG, "Path added to JSON filter: %s", this->json_filter_.as<std::string>().c_str());
 }
 
 float NetgearM5Component::extract_signal_value_(const std::string& key) {
