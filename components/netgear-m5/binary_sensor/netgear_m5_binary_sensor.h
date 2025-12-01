@@ -16,9 +16,7 @@ class NetgearM5BinarySensor : public binary_sensor::BinarySensor, public Compone
   void set_on_value(const std::string &on_value) { on_value_ = on_value; }
   void set_off_value(const std::string &off_value) { off_value_ = off_value; }
   
-  void setup() override {
-    parent_->register_binary_sensor(this);
-  }
+  void setup() override;
   
   void dump_config() override;
   

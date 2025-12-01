@@ -14,9 +14,7 @@ class NetgearM5TextSensor : public text_sensor::TextSensor, public Component {
   void set_parent(NetgearM5Component *parent) { parent_ = parent; }
   void set_path(const std::string &path) { path_ = path; }
   
-  void setup() override {
-    parent_->register_text_sensor(this);
-  }
+  void setup() override;
   
   void dump_config() override;
   

@@ -7,6 +7,10 @@ namespace netgear_m5 {
 
 static const char *const TAG = "netgear_m5.sensor";
 
+void NetgearM5Sensor::setup() {
+  parent_->register_sensor(this);
+}
+
 void NetgearM5Sensor::dump_config() {
   LOG_SENSOR("", "Netgear M5 Sensor", this);
   ESP_LOGCONFIG(TAG, "  JSON Path: %s", this->path_.c_str());

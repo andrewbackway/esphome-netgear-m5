@@ -7,6 +7,10 @@ namespace netgear_m5 {
 
 static const char *const TAG = "netgear_m5.binary_sensor";
 
+void NetgearM5BinarySensor::setup() {
+  parent_->register_binary_sensor(this);
+}
+
 void NetgearM5BinarySensor::dump_config() {
   LOG_BINARY_SENSOR("", "Netgear M5 Binary Sensor", this);
   ESP_LOGCONFIG(TAG, "  JSON Path: %s", this->path_.c_str());
