@@ -1,4 +1,5 @@
 #include "netgear_m5_sensor.h"
+#include "../netgear-m5.h"
 #include "esphome/core/log.h"
 
 namespace esphome {

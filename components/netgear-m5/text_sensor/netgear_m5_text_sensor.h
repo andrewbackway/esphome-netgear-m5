@@ -2,10 +2,12 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/text_sensor/text_sensor.h"
-#include "../netgear-m5.h"
 
 namespace esphome {
 namespace netgear_m5 {
+
+// Forward declaration
+class NetgearM5Component;
 
 class NetgearM5TextSensor : public text_sensor::TextSensor, public Component {
  public:
