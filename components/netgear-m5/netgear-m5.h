@@ -7,9 +7,6 @@
 #include <ArduinoJson.h>
 #include "esp_http_client.h"
 #include "esphome.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
-#include "esphome/components/sensor/sensor.h"
-#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/core/log.h"
 
 extern "C" {
