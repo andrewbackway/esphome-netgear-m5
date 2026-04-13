@@ -1,3 +1,5 @@
+# PROJECT ARCHIVED AND AVAILABLE FOR REFERNCE ONLY
+
 # Netgear M5 ESPHome Component
 
 This project provides an ESPHome component for integrating with Netgear M5 routers, enabling monitoring of various router metrics through sensors in an ESPHome environment. The component fetches data from the router's API, processes it, and exposes it via numeric, text, and binary sensors.
